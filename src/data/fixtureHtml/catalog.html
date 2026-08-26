@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An original sample catalogue of compact music devices, built as a semantic fixture for Graft.">
+  <link rel="icon" href="data:,">
+  <title>Signal Cabinet | Compact music devices</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --canvas: #e8e9e3;
+      --surface: #f4f4ed;
+      --surface-strong: #d6d8d0;
+      --ink: #1b1c1a;
+      --muted: #5c5e58;
+      --line: #969990;
+      --accent: #d84a24;
+      --accent-ink: #f8f2e8;
+      --focus: #1b1c1a;
+      --radius: 4px;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--canvas);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    a { color: inherit; }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .shell {
+      width: min(100% - 32px, 1240px);
+      margin-inline: auto;
+    }
+
+    .site-head {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: var(--radius);
+      background: var(--ink);
+      color: var(--surface);
+      font-family: "Courier New", monospace;
+    }
+
+    .site-head nav {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .site-head nav a { text-decoration: none; }
+    .site-head nav a:hover { text-decoration: underline; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      gap: clamp(32px, 7vw, 96px);
+      align-items: center;
+      min-height: min(660px, calc(100dvh - 68px));
+      padding-block: clamp(48px, 7vw, 92px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-copy { max-width: 660px; }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-family: "Courier New", monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin: 0;
+      font-size: clamp(3.5rem, 7.5vw, 7.2rem);
+      font-weight: 800;
+      letter-spacing: -0.075em;
+      line-height: 0.9;
+    }
+
+    .hero-copy > p:last-child {
+      max-width: 42ch;
+      margin: 28px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.5vw, 1.2rem);
+    }
+
+    .device-stage {
+      display: grid;
+      min-height: 430px;
+      place-items: center;
+      margin: 0;
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      overflow: hidden;
+    }
+
+    .device {
+      width: min(76%, 390px);
+      aspect-ratio: 5 / 4;
+      padding: 24px;
+      border: 2px solid var(--ink);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 14px 16px 0 color-mix(in srgb, var(--ink) 18%, transparent);
+      transform: rotate(-4deg);
+    }
+
+    .device-label {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 12px;
+      font-family: "Courier New", monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .device-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-top: 30px;
+    }
+
+    .knob {
+      aspect-ratio: 1;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: var(--ink);
+      box-shadow: inset 0 0 0 12px var(--surface);
+    }
+
+    .knob::after {
+      display: block;
+      width: 2px;
+      height: 33%;
+      margin: 8% auto 0;
+      background: var(--accent);
+      content: "";
+    }
+
+    .device-meter {
+      height: 36px;
+      margin-top: 26px;
+      border: 2px solid var(--ink);
+      background: repeating-linear-gradient(90deg, var(--accent) 0 9%, transparent 9% 12%);
+    }
+
+    .search-panel {
+      padding-block: 38px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .search-panel h2,
+    .catalog-heading,
+    .cart-panel h2 {
+      margin: 0 0 20px;
+      font-size: clamp(1.6rem, 3vw, 2.35rem);
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+    }
+
+    .search-grid,
+    .cart-form {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 0.8fr) minmax(150px, 0.55fr) auto;
+      gap: 14px;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    label,
+    legend {
+      font-family: "Courier New", monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--ink);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input,
+    select { padding: 10px 12px; }
+
+    input::placeholder { color: var(--muted); }
+
+    button {
+      padding: 10px 18px;
+      background: var(--ink);
+      color: var(--surface);
+      cursor: pointer;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    button:hover { background: var(--accent); }
+    button:active { transform: translateY(1px); }
+
+    .check-field {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--ink);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .check-field input {
+      width: 18px;
+      min-height: 18px;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .catalog-section { padding-block: 64px; }
+
+    .catalog-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .catalog-header p {
+      margin: 0;
+      color: var(--muted);
+      font-family: "Courier New", monospace;
+      font-size: 0.82rem;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      padding: 1px;
+      background: var(--line);
+    }
+
+    .product {
+      min-width: 0;
+      padding: clamp(24px, 4vw, 42px);
+      background: var(--surface);
+    }
+
+    .product:first-child {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+      column-gap: 48px;
+    }
+
+    .product:first-child .product-specs { align-self: end; }
+
+    .product:last-child {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+      column-gap: 48px;
+    }
+
+    .product:last-child .product-type { grid-column: 1; grid-row: 1; }
+    .product:last-child h3 { grid-column: 1; grid-row: 2; }
+    .product:last-child .product-description { grid-column: 1; grid-row: 3; }
+    .product:last-child .price-line { grid-column: 1; grid-row: 4; }
+    .product:last-child .product-specs { grid-column: 2; grid-row: 1 / 5; align-self: end; }
+
+    .product-type {
+      margin: 0 0 14px;
+      color: var(--accent);
+      font-family: "Courier New", monospace;
+      font-size: 0.73rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .product h3 {
+      margin: 0;
+      font-size: clamp(1.7rem, 3vw, 2.7rem);
+      letter-spacing: -0.045em;
+      line-height: 1;
+    }
+
+    .product-description {
+      max-width: 46ch;
+      margin: 18px 0 26px;
+      color: var(--muted);
+    }
+
+    .price-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: auto;
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+    }
+
+    .stock { color: var(--muted); font-size: 0.8rem; }
+
+    .product-specs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 24px 0 0;
+    }
+
+    .product-specs div {
+      min-width: 0;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    dt {
+      color: var(--muted);
+      font-family: "Courier New", monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    dd { margin: 4px 0 0; font-weight: 700; }
+
+    .cart-panel {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.65fr) minmax(0, 1.35fr);
+      gap: clamp(32px, 7vw, 92px);
+      padding-block: 64px 78px;
+      border-top: 1px solid var(--line);
+    }
+
+    .cart-panel > div > p {
+      max-width: 38ch;
+      color: var(--muted);
+    }
+
+    .cart-form { grid-template-columns: minmax(220px, 1fr) 100px auto; }
+
+    .cart-status {
+      grid-column: 1 / -1;
+      display: block;
+      margin-top: 8px;
+      padding: 16px;
+      border-left: 6px solid var(--accent);
+      background: var(--surface-strong);
+      color: var(--muted);
+    }
+
+    footer {
+      padding-block: 24px 34px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 820px) {
+      .shell { width: min(100% - 24px, 1240px); }
+      .hero { grid-template-columns: 1fr; min-height: auto; }
+      .hero-copy { padding-top: 20px; }
+      h1 { max-width: 11ch; font-size: clamp(3.3rem, 15vw, 5.8rem); }
+      .device-stage { min-height: 340px; }
+      .search-grid,
+      .cart-form { grid-template-columns: 1fr 1fr; }
+      .search-grid .field:first-child,
+      .search-grid button,
+      .cart-form .field:first-child,
+      .cart-form button { grid-column: 1 / -1; }
+      .product-grid { grid-template-columns: 1fr; }
+      .product:first-child,
+      .product:last-child { grid-column: auto; grid-template-columns: 1fr; }
+      .product:last-child .product-type,
+      .product:last-child h3,
+      .product:last-child .product-description,
+      .product:last-child .price-line,
+      .product:last-child .product-specs { grid-column: auto; grid-row: auto; }
+      .cart-panel { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .site-head { align-items: flex-start; padding-block: 16px; }
+      .site-head nav { flex-direction: column; align-items: flex-end; gap: 4px; }
+      .device-stage { min-height: 300px; }
+      .device { width: 84%; padding: 18px; }
+      .search-grid,
+      .cart-form { grid-template-columns: 1fr; }
+      .search-grid > *,
+      .cart-form > * { grid-column: 1 !important; }
+      .catalog-header { align-items: flex-start; flex-direction: column; gap: 4px; }
+      .product-specs { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #1c1d1b;
+        --surface: #292a27;
+        --surface-strong: #373934;
+        --ink: #eeeee5;
+        --muted: #b8bbb1;
+        --line: #666960;
+        --accent: #f06a43;
+        --accent-ink: #231a16;
+        --focus: #f06a43;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+      button:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-head shell">
+    <a class="brand" href="#top" aria-label="Signal Cabinet home">
+      <span class="brand-mark" aria-hidden="true">SC</span>
+      Signal Cabinet
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#catalog">Devices</a>
+      <a href="#demo-cart">Demo cart <data value="0">0</data></a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero shell" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Compact music devices</p>
+        <h1 id="page-title">Small tools. Clear signal.</h1>
+        <p>Six original desktop devices, documented for people and structured for tools.</p>
+      </div>
+      <figure class="device-stage" aria-label="Illustration of the Palm Relay monitor switcher">
+        <div class="device" aria-hidden="true">
+          <div class="device-label"><span>Palm Relay</span><span>Output 2</span></div>
+          <div class="device-controls"><span class="knob"></span><span class="knob"></span><span class="knob"></span></div>
+          <div class="device-meter"></div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="search-panel shell" aria-labelledby="search-title">
+      <h2 id="search-title">Find a device</h2>
+      <form class="search-grid" role="search" action="/fixtures/catalog.html#catalog" method="get">
+        <div class="field">
+          <label for="catalog-query">Search the catalogue</label>
+          <input id="catalog-query" name="query" type="search" placeholder="Name, use or connection" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="catalog-category">Category</label>
+          <select id="catalog-category" name="category">
+            <option value="all">All devices</option>
+            <option value="routing">Routing</option>
+            <option value="mixing">Mixing</option>
+            <option value="recording">Recording</option>
+            <option value="effects">Effects</option>
+          </select>
+        </div>
+        <label class="check-field" for="in-stock">
+          <input id="in-stock" name="in_stock" type="checkbox" value="true">
+          In stock only
+        </label>
+        <button type="submit">Search devices</button>
+      </form>
+    </section>
+
+    <section class="catalog-section shell" id="catalog" aria-labelledby="catalog-title">
+      <div class="catalog-header">
+        <h2 class="catalog-heading" id="catalog-title">The device shelf</h2>
+        <p><data value="6">6</data> sample products</p>
+      </div>
+
+      <div class="product-grid" role="list">
+        <article class="product" id="palm-relay" data-product-id="palm-relay" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <div>
+            <p class="product-type" itemprop="category">Routing</p>
+            <h3 itemprop="name">Palm Relay</h3>
+            <p class="product-description" itemprop="description">A three-source monitor switcher with one large level control and a hardware mute.</p>
+            <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+              <meta itemprop="priceCurrency" content="USD">
+              <data itemprop="price" value="118">$118</data>
+              <span class="stock" itemprop="availability" content="https://schema.org/InStock">In stock</span>
+            </div>
+          </div>
+          <dl class="product-specs">
+            <div><dt>Inputs</dt><dd>3 stereo</dd></div>
+            <div><dt>Output</dt><dd>Balanced pair</dd></div>
+            <div><dt>Power</dt><dd>Passive</dd></div>
+            <div><dt>Width</dt><dd>14 cm</dd></div>
+          </dl>
+        </article>
+
+        <article class="product" id="shoreline-4" data-product-id="shoreline-4" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <p class="product-type" itemprop="category">Mixing</p>
+          <h3 itemprop="name">Shoreline 4</h3>
+          <p class="product-description" itemprop="description">Four quiet channels with cue sends for compact live sets and tabletop instruments.</p>
+          <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <meta itemprop="priceCurrency" content="USD">
+            <data itemprop="price" value="246">$246</data>
+            <span class="stock" itemprop="availability" content="https://schema.org/InStock">In stock</span>
+          </div>
+          <dl class="product-specs"><div><dt>Channels</dt><dd>4 mono</dd></div><div><dt>Cue sends</dt><dd>2</dd></div></dl>
+        </article>
+
+        <article class="product" id="loop-fold" data-product-id="loop-fold" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <p class="product-type" itemprop="category">Effects</p>
+          <h3 itemprop="name">Loop Fold</h3>
+          <p class="product-description" itemprop="description">A stereo phrase looper with replace, half-speed and momentary capture modes.</p>
+          <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <meta itemprop="priceCurrency" content="USD">
+            <data itemprop="price" value="189">$189</data>
+            <span class="stock" itemprop="availability" content="https://schema.org/LimitedAvailability">Low stock</span>
+          </div>
+          <dl class="product-specs"><div><dt>Capture</dt><dd>90 seconds</dd></div><div><dt>Signal</dt><dd>Stereo</dd></div></dl>
+        </article>
+
+        <article class="product" id="grain-dial" data-product-id="grain-dial" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <p class="product-type" itemprop="category">Effects</p>
+          <h3 itemprop="name">Grain Dial</h3>
+          <p class="product-description" itemprop="description">A texture processor that turns short incoming sounds into steady harmonic beds.</p>
+          <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <meta itemprop="priceCurrency" content="USD">
+            <data itemprop="price" value="164">$164</data>
+            <span class="stock" itemprop="availability" content="https://schema.org/PreOrder">Restocking</span>
+          </div>
+          <dl class="product-specs"><div><dt>Modes</dt><dd>3 textures</dd></div><div><dt>Control</dt><dd>CV or knob</dd></div></dl>
+        </article>
+
+        <article class="product" id="tone-parcel" data-product-id="tone-parcel" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <p class="product-type" itemprop="category">Recording</p>
+          <h3 itemprop="name">Tone Parcel</h3>
+          <p class="product-description" itemprop="description">A pocket recorder for stereo sketches with markers and instant level recall.</p>
+          <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <meta itemprop="priceCurrency" content="USD">
+            <data itemprop="price" value="214">$214</data>
+            <span class="stock" itemprop="availability" content="https://schema.org/InStock">In stock</span>
+          </div>
+          <dl class="product-specs"><div><dt>Format</dt><dd>24-bit WAV</dd></div><div><dt>Runtime</dt><dd>11 hours</dd></div></dl>
+        </article>
+
+        <article class="product" id="cable-dock-8" data-product-id="cable-dock-8" role="listitem" itemscope itemtype="https://schema.org/Product">
+          <p class="product-type" itemprop="category">Routing</p>
+          <h3 itemprop="name">Cable Dock 8</h3>
+          <p class="product-description" itemprop="description">Eight passive connections that keep a changing desktop setup labeled and reachable.</p>
+          <div class="price-line" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <meta itemprop="priceCurrency" content="USD">
+            <data itemprop="price" value="86">$86</data>
+            <span class="stock" itemprop="availability" content="https://schema.org/InStock">In stock</span>
+          </div>
+          <dl class="product-specs"><div><dt>Points</dt><dd>8 stereo</dd></div><div><dt>Power</dt><dd>Passive</dd></div></dl>
+        </article>
+      </div>
+    </section>
+
+    <section class="cart-panel shell" id="demo-cart" aria-labelledby="cart-title">
+      <div>
+        <h2 id="cart-title">Demo cart</h2>
+        <p>This local fixture records a selection for testing. It has no checkout, payment or delivery step.</p>
+      </div>
+      <form class="cart-form" name="demo-cart" action="/fixtures/catalog.html#demo-cart" method="get" data-graft-tool="add_to_demo_cart" data-graft-owned="true" data-graft-effect="local">
+        <input type="hidden" name="intent" value="add-to-demo-cart">
+        <input type="hidden" name="scope" value="local-fixture">
+        <div class="field">
+          <label for="cart-product">Device</label>
+          <select id="cart-product" name="product_id" required>
+            <option value="">Choose a device</option>
+            <option value="palm-relay">Palm Relay</option>
+            <option value="shoreline-4">Shoreline 4</option>
+            <option value="loop-fold">Loop Fold</option>
+            <option value="grain-dial">Grain Dial</option>
+            <option value="tone-parcel">Tone Parcel</option>
+            <option value="cable-dock-8">Cable Dock 8</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="cart-quantity">Quantity</label>
+          <input id="cart-quantity" name="quantity" type="number" min="1" max="3" value="1" required>
+        </div>
+        <button type="submit" name="add" value="demo-cart">Add to demo cart</button>
+        <output class="cart-status" name="cart_status" for="cart-product cart-quantity">Cart is empty. Compiled mode handles this action locally.</output>
+      </form>
+    </section>
+  </main>
+
+  <footer class="shell">
+    Original sample content for Graft. Prices and products are fictional.
+  </footer>
+</body>
+</html>

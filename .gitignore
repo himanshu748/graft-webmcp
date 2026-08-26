@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+coverage/
+.playwright-cli/
+.brand-preview/
+*.local
+.env
+.env.*
+!.env.example
