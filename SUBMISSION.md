@@ -37,7 +37,7 @@ The reviewed result exports as a manifest plus a `registerGraftTools(handlers)` 
 
 ### Implementation approach
 
-A server endpoint reads the target page once, strips the response headers that block embedding, inlines external stylesheets, and returns the markup. It never forwards cookies or credentials, never caches target content (`no-store`, nothing on disk), honours `robots.txt`, and refuses auth, banking, mail and government domains by policy. Every outbound request, the page and each external stylesheet alike, revalidates its host on every redirect hop against private and link-local ranges, because a stylesheet href is attacker-controlled too.
+A server endpoint reads the target page once, strips the response headers that block embedding, inlines external stylesheets, and returns the markup. It never forwards cookies or credentials, never caches target content (`no-store`, nothing on disk), honours `robots.txt`, and refuses auth, banking, mail and government domains by policy. Hosts are resolved rather than pattern-matched, so a public name pointing at a private address is refused. Every outbound request, the page and each external stylesheet alike, revalidates its host on every redirect hop against private and link-local ranges, because a stylesheet href is attacker-controlled too.
 
 The client sanitizes that markup into an inert snapshot, removing scripts, frames and every network-capable attribute, then compiles it. Nine recipes cover search forms, repeated content regions, data tables, navigation, page structure and write controls. Site chrome is excluded from content recipes, because a nav bar repeats exactly like a product grid does.
 
@@ -47,7 +47,7 @@ Approved tools register through `document.modelContext.registerTool` with an `Ab
 
 ### Honest limits
 
-Measured, not asserted. Semantic sites compile well. Sites behind bot protection refuse the read: Stack Overflow answers 403 and Allrecipes answers 402, and Graft reports what happened instead of spinning. When a page returns a shell, Graft renders it in a sandboxed headless browser and compiles the result. If that still yields nothing, it says so and names the character count it read. Where derivation is weak the confidence gate holds or rejects the candidate rather than shipping a tool an agent cannot aim.
+Measured, not asserted. Semantic sites compile well. Sites behind bot protection refuse the read: Stack Overflow answers 403 and Allrecipes answers 402, and Graft reports what happened instead of spinning. When a page returns a shell, Graft renders it with a headless Chromium in the serverless function and compiles the result, which is how it compiles its own single-page app. Every request that browser makes has its host resolved and checked before it is allowed out. That Chromium runs with `--no-sandbox`, so isolation comes from the function boundary rather than the Chromium process sandbox, and DNS rebinding is not closed by it. If rendering still yields nothing, Graft says so and names the character count it read. Where derivation is weak the confidence gate holds or rejects the candidate rather than shipping a tool an agent cannot aim.
 
 ---
 

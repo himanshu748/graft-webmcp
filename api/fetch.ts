@@ -1,7 +1,7 @@
 import {
   assertPublicHost,
   IntakeError,
-  MAX_BYTES,
+  readCapped,
   TIMEOUT_MS,
   timeoutSignal,
   UA,
@@ -52,10 +52,10 @@ async function robotsAllows(target: URL): Promise<boolean> {
     let applies = false;
     let allowed = true;
     for (const rawLine of body.split(/\r?\n/)) {
-      const line = rawLine.split("#")[0].trim();
+      const line = (rawLine.split("#")[0] ?? "").trim();
       if (!line) continue;
       const [rawKey, ...rest] = line.split(":");
-      const key = rawKey.trim().toLowerCase();
+      const key = (rawKey ?? "").trim().toLowerCase();
       const value = rest.join(":").trim();
       if (key === "user-agent") {
         applies = value === "*" || value.toLowerCase() === "graftbot";
@@ -94,57 +94,12 @@ async function fetchFollowing(start: URL): Promise<{ response: Response; finalUr
   throw new IntakeError(400, "redirects", "That URL redirected too many times.");
 }
 
-/**
- * A chunked response has no content-length to check, so the cap is enforced
- * while reading. Buffering first and measuring afterwards is how a function
- * runs out of memory.
- */
-async function readCapped(response: Response, limit = MAX_BYTES): Promise<string> {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > limit) {
-    throw new IntakeError(413, "too-large", "That page is larger than Graft's 3 MB snapshot limit.");
-  }
-
-  const body = response.body;
-  if (!body) return "";
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel().catch(() => {});
-        throw new IntakeError(
-          413,
-          "too-large",
-          "That page is larger than Graft's 3 MB snapshot limit.",
-        );
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const joined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder("utf-8").decode(joined);
-}
 
 /**
  * The sanitizer drops <link>, so external CSS is inlined before it runs.
  * Without this every live snapshot renders as unstyled text.
  */
-async function inlineStylesheets(html: string, base: URL): Promise<{ html: string; inlined: number }> {
+export async function inlineStylesheets(html: string, base: URL): Promise<{ html: string; inlined: number }> {
   const linkPattern = /<link\b[^>]*>/gi;
   const links = html.match(linkPattern) ?? [];
   const hrefs: string[] = [];

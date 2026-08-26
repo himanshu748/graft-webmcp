@@ -1,4 +1,4 @@
-import { isObviouslyPrivateHost, UA } from "./_net.js";
+import { isHostAllowedForEgress, UA } from "./_net.js";
 
 const RENDER_TIMEOUT_MS = 20_000;
 const SETTLE_MS = 1_200;
@@ -33,19 +33,28 @@ export async function renderWithBrowser(target: URL): Promise<string | null> {
     await page.setRequestInterception(true);
 
     page.on("request", (request) => {
-      try {
-        const url = new URL(request.url());
-        if (url.protocol !== "https:" && url.protocol !== "http:" && url.protocol !== "data:") {
-          return void request.abort();
+      void (async () => {
+        try {
+          const url = new URL(request.url());
+          if (url.protocol === "data:" || url.protocol === "blob:") {
+            return void (await request.continue().catch(() => {}));
+          }
+          if (url.protocol !== "https:" && url.protocol !== "http:") {
+            return void (await request.abort().catch(() => {}));
+          }
+          if (BLOCKED_RESOURCES.has(request.resourceType())) {
+            return void (await request.abort().catch(() => {}));
+          }
+          // Resolves the name rather than pattern-matching it, so a public
+          // hostname pointing at a private address does not get through.
+          if (!(await isHostAllowedForEgress(url.hostname))) {
+            return void (await request.abort().catch(() => {}));
+          }
+          return void (await request.continue().catch(() => {}));
+        } catch {
+          return void (await request.abort().catch(() => {}));
         }
-        if (url.protocol !== "data:" && isObviouslyPrivateHost(url.hostname)) {
-          return void request.abort();
-        }
-        if (BLOCKED_RESOURCES.has(request.resourceType())) return void request.abort();
-        return void request.continue();
-      } catch {
-        return void request.abort();
-      }
+      })();
     });
 
     // A dialog blocks the render loop until something answers it.

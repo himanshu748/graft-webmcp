@@ -1042,10 +1042,10 @@ export function App() {
             {intakeMode === "live" ? (
               <>
                 <p className="intake-help" id="intake-help">
-                  Any server-rendered public page works. Pages that build themselves with
-                  JavaScript return a shell, and Graft says so rather than showing an empty
-                  tool list. Authentication, banking, mail and government domains are
-                  refused, and robots.txt is honoured.
+                  Any public page works. If the server returns a shell, Graft renders the
+                  page in a headless browser and compiles that instead, and tells you when
+                  even rendering finds nothing. Authentication, banking, mail and government
+                  domains are refused, and robots.txt is honoured.
                 </p>
                 <ul className="preset-rack" aria-label="Verified example pages">
                   {livePresets.map((preset) => (

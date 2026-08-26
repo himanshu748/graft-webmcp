@@ -26,7 +26,8 @@ export function isPrivateAddress(address: string): boolean {
   }
   const parts = address.split(".").map(Number);
   if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return true;
-  const [a, b] = parts;
+  const a = parts[0] ?? -1;
+  const b = parts[1] ?? -1;
   if (a === 10 || a === 127 || a === 0) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
@@ -90,6 +91,84 @@ export function isObviouslyPrivateHost(host: string): boolean {
     return true;
   }
   return isIP(lower) ? isPrivateAddress(lower) : false;
+}
+
+const hostVerdictCache = new Map<string, boolean>();
+
+/**
+ * `isObviouslyPrivateHost` only catches literal addresses. A public hostname
+ * with a private A record walks straight past it, which is the standard way to
+ * reach a cloud metadata endpoint. Egress decisions must resolve the name.
+ *
+ * Residual risk: Chromium resolves independently, so a DNS entry that answers
+ * differently between our lookup and its own (rebinding) is not closed by this.
+ * Closing that needs network-level egress control, which a serverless function
+ * does not have.
+ */
+export async function isHostAllowedForEgress(host: string): Promise<boolean> {
+  const lower = host.toLowerCase();
+  const cached = hostVerdictCache.get(lower);
+  if (cached !== undefined) return cached;
+
+  let allowed: boolean;
+  if (isObviouslyPrivateHost(lower)) {
+    allowed = false;
+  } else if (isIP(lower)) {
+    allowed = !isPrivateAddress(lower);
+  } else {
+    try {
+      const resolved = await lookup(lower, { all: true });
+      allowed = resolved.length > 0 && !resolved.some((entry) => isPrivateAddress(entry.address));
+    } catch {
+      allowed = false;
+    }
+  }
+
+  if (hostVerdictCache.size > 500) hostVerdictCache.clear();
+  hostVerdictCache.set(lower, allowed);
+  return allowed;
+}
+
+/**
+ * A chunked response has no content-length to check, so the cap is enforced
+ * while reading. Buffering first and measuring afterwards is how a function
+ * runs out of memory.
+ */
+export async function readCapped(response: Response, limit = MAX_BYTES): Promise<string> {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (declared > limit) {
+    throw new IntakeError(413, "too-large", "That response is larger than Graft's size limit.");
+  }
+
+  const body = response.body;
+  if (!body) return "";
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        throw new IntakeError(413, "too-large", "That response is larger than Graft's size limit.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8").decode(joined);
 }
 
 export function timeoutSignal(ms: number): AbortSignal {
