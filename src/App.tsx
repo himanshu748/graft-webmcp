@@ -1302,7 +1302,7 @@ export function App() {
                 {previewHtml ? (
                   <iframe
                     className="preview-frame"
-                    title={`${selectedFixture.title} sanitized preview`}
+                    title={`Sanitized snapshot of ${activeSource?.label ?? selectedFixture.title}`}
                     srcDoc={previewHtml}
                     sandbox=""
                   />

@@ -916,7 +916,9 @@ button:disabled {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Not `contain`: an in-flow panel whose content fits is still a scroll
+     container, and `contain` would stop the wheel reaching the page. */
+  overscroll-behavior: auto;
 }
 
 .tool-row {
@@ -1004,7 +1006,9 @@ button:disabled {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Not `contain`: an in-flow panel whose content fits is still a scroll
+     container, and `contain` would stop the wheel reaching the page. */
+  overscroll-behavior: auto;
 }
 
 .inspector-identity,
@@ -1274,7 +1278,9 @@ button:disabled {
 .timeline-rows {
   max-height: 190px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Not `contain`: an in-flow panel whose content fits is still a scroll
+     container, and `contain` would stop the wheel reaching the page. */
+  overscroll-behavior: auto;
 }
 
 .timeline-empty {
