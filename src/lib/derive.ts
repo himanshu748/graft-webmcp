@@ -9,11 +9,13 @@ import {
 } from "./dom-utils";
 import {
   collectionNoun,
+  collectionNounInfo,
   deriveSnapshot,
   searchNoun,
   tableNoun,
 } from "./snapshot";
 import type {
+  ActionCandidateSnapshot,
   CollectionSnapshot,
   ConfidenceResult,
   GraftTool,
@@ -185,32 +187,57 @@ function searchFieldSchema(field: SearchFormFieldSnapshot): JsonSchema {
   };
 }
 
+/**
+ * A class-derived label like "row" reads as nonsense in a tool description.
+ * Fall back to the noun, which is derived from the rows themselves.
+ */
+function humanCollectionLabel(collection: CollectionSnapshot, noun: string): string {
+  if (collection.labelSource === "semantic" && collection.label) {
+    return sanitizePageText(collection.label, 80);
+  }
+  return noun.replace(/_/g, " ");
+}
+
 function collectionTool(collection: CollectionSnapshot): GraftTool {
-  const rawNoun = collectionNoun(collection);
-  const noun = pluralize(normalizeToolName(rawNoun, "items"));
+  const nounInfo = collectionNounInfo(collection);
+  const noun = pluralize(normalizeToolName(nounInfo.noun, "items"));
   const hasDistinguishingRows = collection.rows.every(
     (row) => Boolean(row.fields.title || row.fields.href),
   );
+  const namedSemantically =
+    collection.labelSource === "semantic" && Boolean(collection.label);
+  const namedFromClasses = collection.labelSource === "classes";
+  // Rows that name themselves are self-describing, so a missing heading is not
+  // the same kind of ambiguity as a region nobody can identify at all.
+  const namedByRows = nounInfo.source === "row-key" || nounInfo.source === "row-fields";
+  const unnamed = collection.labelSource === "fallback" && !namedByRows;
   const confidence = scoreConfidence({
-    accessibleName:
-      collection.label && collection.label !== "items"
-        ? `Region is labelled “${sanitizePageText(collection.label, 60)}”`
+    accessibleName: namedSemantically
+      ? `Region is labelled “${sanitizePageText(collection.label, 60)}”`
+      : namedByRows
+        ? `Rows name themselves through the “${nounInfo.noun}” fields they expose`
         : false,
     stableSelector: collection.selectorStable ? "Collection selector resolves uniquely" : false,
     positionalSelector: !collection.selectorStable ? "Collection requires a positional selector" : false,
     fullyTypedInputs: "Pagination maps to bounded integer parameters",
-    classNameInference: collection.inferredFromClasses
-      ? "Repeated structure was inferred partly from class signatures"
-      : false,
-    ambiguousRepeat: !hasDistinguishingRows
-      ? "Some repeated rows have no title or link key"
-      : false,
+    classNameInference:
+      collection.inferredFromClasses || namedFromClasses
+        ? namedFromClasses
+          ? `Name came from the class attribute “${sanitizePageText(collection.label, 40)}”, not from page semantics`
+          : "Repeated structure was inferred partly from class signatures"
+        : false,
+    ambiguousRepeat:
+      !hasDistinguishingRows || unnamed
+        ? unnamed
+          ? "Repeated region carries no heading, caption or accessible name"
+          : "Some repeated rows have no title or link key"
+        : false,
   });
   return withConfidence(
     {
       id: collection.id,
       name: normalizeToolName(`list_${noun}`, "list_items"),
-      description: `List ${sanitizePageText(collection.label, 80) || "repeated items"} visible on the current page. Use offset and limit to paginate. Returns structured, untrusted page content and never changes the page.`,
+      description: `List ${humanCollectionLabel(collection, nounInfo.noun)} visible on the current page. Use offset and limit to paginate. Returns structured, untrusted page content and never changes the page.`,
       inputSchema: {
         type: "object",
         properties: { ...PAGINATION_PROPERTIES },
@@ -232,8 +259,14 @@ function collectionTool(collection: CollectionSnapshot): GraftTool {
 function stableRowKey(rows: CollectionSnapshot["rows"]): string | null {
   const first = rows[0];
   if (!first) return null;
-  const candidates = Object.keys(first.fields).filter((key) => /_(?:id|slug)$/.test(key));
-  for (const key of candidates) {
+  const keys = Object.keys(first.fields);
+  // An id or slug is ideal. A title that is present and unique on every row is
+  // what real pages actually publish, and it identifies a row just as well.
+  const ranked = [
+    ...keys.filter((key) => /_(?:id|slug)$/.test(key)),
+    ...keys.filter((key) => key === "title" || key === "name"),
+  ];
+  for (const key of ranked) {
     const values = rows.map((row) => row.fields[key]).filter(Boolean);
     if (values.length === rows.length && new Set(values).size === values.length) return key;
   }
@@ -458,12 +491,126 @@ function uniqueNames(tools: GraftTool[]): GraftTool[] {
   });
 }
 
+/**
+ * Navigation is not content, but where a site can take you is genuinely useful
+ * to an agent. It gets one read tool of its own rather than being mistaken for
+ * a product list.
+ */
+function navigationTool(collection: CollectionSnapshot): GraftTool {
+  const named = collection.rows.filter((row) => Boolean(row.fields.title || row.text)).length;
+  const confidence = scoreConfidence({
+    accessibleName: "Navigation links carry their own link text",
+    stableSelector: collection.selectorStable ? "Navigation region resolves uniquely" : false,
+    positionalSelector: !collection.selectorStable
+      ? "Navigation region requires a positional selector"
+      : false,
+    fullyTypedInputs: "Pagination maps to bounded integer parameters",
+    ambiguousRepeat:
+      named < collection.rows.length ? "Some navigation entries have no link text" : false,
+  });
+  return withConfidence(
+    {
+      id: collection.id,
+      name: "list_navigation",
+      description:
+        "List the navigation destinations offered by this page, with their link text and target. Use it to discover where the site can go before asking for a specific page. Returns untrusted page content and never changes the page.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          offset: { type: "integer", description: "Zero-based row offset.", minimum: 0, default: 0 },
+          limit: {
+            type: "integer",
+            description: "Maximum rows to return.",
+            minimum: 1,
+            maximum: 25,
+            default: 15,
+          },
+        },
+        additionalProperties: false,
+      },
+      recipe: "R6",
+      selector: collection.selector,
+      fallbackSelectors: [],
+      action: "read",
+      readOnly: true,
+      destructive: false,
+      origin: "derived",
+      binding: { kind: "collection", itemSelector: collection.itemSelector },
+    },
+    confidence,
+  );
+}
+
+function actionCandidateTool(candidate: ActionCandidateSnapshot): GraftTool {
+  const noun = normalizeToolName(candidate.label, "submit_action");
+  const properties: Record<string, JsonSchema> = {};
+  const required: string[] = [];
+  if (candidate.targets.length > 0) {
+    properties.target = {
+      type: "string",
+      description: "Which item the action applies to, exactly as shown on the page.",
+      enum: candidate.targets,
+    };
+    required.push("target");
+  }
+
+  const confidence = scoreConfidence({
+    overrideScore: 55,
+    accessibleName: `Control is labelled “${candidate.label}”`,
+    ambiguousRepeat:
+      candidate.count > 1 && candidate.targets.length === 0
+        ? `${candidate.count} identical controls with no distinguishing text`
+        : false,
+  });
+
+  // An unbound destructive contract must never register itself. Whatever the
+  // evidence says, this one waits for a human.
+  const held: ConfidenceResult = {
+    score: Math.min(confidence.score, 55),
+    reasons: [
+      ...confidence.reasons,
+      "Held: a write contract with no bound handler is never registered automatically",
+    ],
+    status: "held",
+  };
+
+  return withConfidence(
+    {
+      id: candidate.id,
+      name: normalizeToolName(noun, "submit_action"),
+      description: `Perform "${candidate.label}" on this page. Graft derived this contract from ${candidate.count === 1 ? "one control" : `${candidate.count} repeated controls`} but no handler is bound, because a snapshot cannot write to a site Graft does not own. Export the manifest to implement it.`,
+      inputSchema: { type: "object", properties, required, additionalProperties: false },
+      recipe: "R7",
+      selector: candidate.selector,
+      fallbackSelectors: [],
+      action: "unbound_write",
+      readOnly: false,
+      destructive: true,
+      origin: "derived",
+      binding: {
+        kind: "action_candidate",
+        controlSelector: candidate.selector,
+        targets: candidate.targets,
+      },
+    },
+    held,
+  );
+}
+
 export function deriveToolsFromSnapshot(snapshot: PageSnapshot): GraftTool[] {
   const tools: GraftTool[] = [summaryTool(snapshot)];
   const outline = outlineTool(snapshot);
   if (outline) tools.push(outline);
   tools.push(...snapshot.searchForms.map(searchTool));
+  let navigationEmitted = false;
   for (const collection of snapshot.collections) {
+    if (collection.chrome) {
+      // One navigation tool is useful. Six are noise.
+      if (navigationEmitted || collection.rows.length < 3) continue;
+      navigationEmitted = true;
+      tools.push(navigationTool(collection));
+      continue;
+    }
     tools.push(collectionTool(collection));
     const detail = collectionDetailTool(collection);
     if (detail) tools.push(detail);
@@ -474,7 +621,39 @@ export function deriveToolsFromSnapshot(snapshot: PageSnapshot): GraftTool[] {
     if (detail) tools.push(detail);
   }
   tools.push(...snapshot.localActions.map(localActionTool));
-  return uniqueNames(tools);
+  tools.push(...snapshot.actionCandidates.map(actionCandidateTool));
+  return uniqueNames(dedupeEquivalentTools(tools));
+}
+
+/**
+ * Responsive markup ships the same control twice, once for mobile and once for
+ * desktop. Emitting search_products and search_products_2 hands the agent a
+ * coin flip, so identical contracts collapse to the most confident one.
+ */
+function dedupeEquivalentTools(tools: GraftTool[]): GraftTool[] {
+  const byShape = new Map<string, GraftTool>();
+  const ordered: GraftTool[] = [];
+
+  for (const tool of tools) {
+    const shape = [
+      tool.name,
+      tool.recipe,
+      tool.action,
+      Object.keys(tool.inputSchema?.properties ?? {}).sort().join(","),
+    ].join("|");
+    const existing = byShape.get(shape);
+    if (!existing) {
+      byShape.set(shape, tool);
+      ordered.push(tool);
+      continue;
+    }
+    if (tool.confidence > existing.confidence) {
+      byShape.set(shape, tool);
+      ordered[ordered.indexOf(existing)] = tool;
+    }
+  }
+
+  return ordered;
 }
 
 export function deriveTools(root: ParentNode = document): GraftTool[] {

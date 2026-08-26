@@ -218,23 +218,36 @@ export function getAccessibleName(element: Element): string {
   return sanitizePageText(element.textContent, 100);
 }
 
-export function findSectionLabel(element: Element, fallback: string): string {
+export type SectionLabelSource = "semantic" | "classes" | "fallback";
+
+export interface SectionLabel {
+  label: string;
+  source: SectionLabelSource;
+}
+
+/**
+ * A label lifted from a class attribute is not an accessible name, and the
+ * difference decides whether a derived tool is trustworthy. Callers need the
+ * provenance, not just the string.
+ */
+export function describeSectionLabel(element: Element, fallback: string): SectionLabel {
+  const semantic = (label: string): SectionLabel => ({ label, source: "semantic" });
   const explicit = getAccessibleName(element);
-  if (element.hasAttribute("aria-label") && explicit) return explicit;
+  if (element.hasAttribute("aria-label") && explicit) return semantic(explicit);
 
   const labelledBy = element.getAttribute("aria-labelledby");
-  if (labelledBy && explicit) return explicit;
+  if (labelledBy && explicit) return semantic(explicit);
 
   const caption = element.querySelector(":scope > caption");
-  if (caption?.textContent) return sanitizePageText(caption.textContent);
+  if (caption?.textContent) return semantic(sanitizePageText(caption.textContent));
 
   const ownHeading = element.querySelector(":scope > h1, :scope > h2, :scope > h3");
-  if (ownHeading?.textContent) return sanitizePageText(ownHeading.textContent);
+  if (ownHeading?.textContent) return semantic(sanitizePageText(ownHeading.textContent));
 
   let previous = element.previousElementSibling;
   while (previous) {
     if (/^H[1-6]$/.test(previous.tagName) && previous.textContent) {
-      return sanitizePageText(previous.textContent);
+      return semantic(sanitizePageText(previous.textContent));
     }
     if (previous.matches("section, article, main, nav, table, ul, ol")) break;
     previous = previous.previousElementSibling;
@@ -244,11 +257,48 @@ export function findSectionLabel(element: Element, fallback: string): string {
     .flatMap((token) => token.split(/[-_]/))
     .map((token) => token.toLowerCase())
     .filter((token) => token.length > 2 && !GENERIC_WORDS.has(token));
-  if (classTokens.length) return sanitizePageText(classTokens.join(" "));
-  return fallback;
+  if (classTokens.length) {
+    return { label: sanitizePageText(classTokens.join(" ")), source: "classes" };
+  }
+  return { label: fallback, source: "fallback" };
 }
 
+export function findSectionLabel(element: Element, fallback: string): string {
+  return describeSectionLabel(element, fallback).label;
+}
+
+/**
+ * Words that only describe markup or layout. A tool named after one of these
+ * tells an agent nothing, so the noun is rejected rather than shipped.
+ */
+const STRUCTURAL_NOUNS = new Set([
+  "li", "lis", "ul", "ol", "div", "divs", "span", "spans", "col", "cols", "row", "rows",
+  "cell", "cells", "gap", "gaps", "center", "centers", "inner", "inners", "outer", "outers",
+  "wrapper", "wrappers", "container", "containers", "box", "boxes", "block", "blocks",
+  "grid", "grids", "flex", "item", "items", "content", "contents", "element", "elements",
+  "menu", "menus", "nav", "navs", "navbar", "navbars", "toc", "tocs", "popover", "popovers",
+  "dropdown", "dropdowns", "carousel", "carousels", "breadcrumb", "breadcrumbs",
+  "sidebar", "sidebars", "footer", "footers", "header", "headers", "widget", "widgets",
+  "vector", "vectors", "panel", "panels", "wrap", "wraps", "inline", "small", "large",
+  "navbox", "navboxes", "wikitable", "wikitables", "infobox", "infoboxes", "table", "tables",
+  "mobile", "desktop", "hidden", "visible", "primary", "secondary", "main", "mains",
+]);
+
+export function isStructuralNoun(noun: string): boolean {
+  const tokens = noun.split("_").filter(Boolean);
+  if (tokens.length === 0) return true;
+  return tokens.every((token) => STRUCTURAL_NOUNS.has(token) || /^\d+$/.test(token));
+}
+
+/** Words whose plural and singular are the same, so naive trimming mangles them. */
+const UNCOUNTABLE = new Set([
+  "news", "series", "species", "data", "media", "analysis", "status", "bus",
+  "campus", "atlas", "index", "press", "class", "process", "access", "focus",
+]);
+
 export function singularize(value: string): string {
+  const tail = value.split("_").pop() ?? value;
+  if (UNCOUNTABLE.has(tail.toLowerCase())) return value;
   if (/ies$/i.test(value)) return value.replace(/ies$/i, "y");
   if (/(sses|shes|ches|xes|zes)$/i.test(value)) return value.replace(/es$/i, "");
   if (/s$/i.test(value) && !/ss$/i.test(value)) return value.slice(0, -1);
@@ -256,6 +306,8 @@ export function singularize(value: string): string {
 }
 
 export function pluralize(value: string): string {
+  const tail = value.split("_").pop() ?? value;
+  if (UNCOUNTABLE.has(tail.toLowerCase())) return value;
   if (/s$/i.test(value)) return value;
   if (/[^aeiou]y$/i.test(value)) return `${value.slice(0, -1)}ies`;
   if (/(s|x|z|ch|sh)$/i.test(value)) return `${value}es`;

@@ -22,9 +22,9 @@ export interface JsonSchema {
   additionalProperties?: boolean | JsonSchema;
 }
 
-export type GraftRecipe = "R1" | "R3" | "R4" | "R7" | "R9";
+export type GraftRecipe = "R1" | "R3" | "R4" | "R6" | "R7" | "R8" | "R9";
 
-export type GraftAction = "fill_submit" | "local_mutation" | "read" | "summarize";
+export type GraftAction = "fill_submit" | "local_mutation" | "read" | "summarize" | "unbound_write";
 
 export type GraftToolStatus = "auto" | "held" | "rejected" | "published";
 
@@ -50,6 +50,8 @@ export interface CollectionSnapshot {
   rows: SnapshotRow[];
   selectorStable: boolean;
   inferredFromClasses: boolean;
+  chrome: boolean;
+  labelSource: "semantic" | "classes" | "fallback";
 }
 
 export interface TableColumnSnapshot {
@@ -111,6 +113,16 @@ export interface PageSnapshot {
   tables: TableSnapshot[];
   searchForms: SearchFormSnapshot[];
   localActions: LocalActionSnapshot[];
+  actionCandidates: ActionCandidateSnapshot[];
+}
+
+export interface ActionCandidateSnapshot {
+  id: string;
+  label: string;
+  verb: string;
+  selector: string;
+  count: number;
+  targets: string[];
 }
 
 export type ToolBinding =
@@ -124,6 +136,7 @@ export type ToolBinding =
     }
   | { kind: "table_item"; columns: TableColumnSnapshot[]; keyField: string }
   | { kind: "search"; inputSelector: string; fields: SearchFormFieldSnapshot[] }
+  | { kind: "action_candidate"; controlSelector: string; targets: string[] }
   | {
       kind: "local_cart";
       productSelector: string;

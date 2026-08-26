@@ -1,5 +1,7 @@
 import {
   createSelector,
+  describeSectionLabel,
+  isStructuralNoun,
   findSectionLabel,
   getAccessibleName,
   isElementVisible,
@@ -12,6 +14,7 @@ import {
   visibleText,
 } from "./dom-utils";
 import type {
+  ActionCandidateSnapshot,
   CollectionSnapshot,
   LocalActionSnapshot,
   PageSnapshot,
@@ -27,6 +30,7 @@ const SEARCH_TERM = /(?:^|[-_\s])(search|query|keyword|lookup|find|q)(?:$|[-_\s]
 const FIELD_TERM = /(price|cost|rating|status|availability|stock|author|date|time|category|tag|location)/i;
 
 interface CollectionCandidate {
+  chrome: boolean;
   parent: Element;
   items: Element[];
   inferredFromClasses: boolean;
@@ -73,6 +77,40 @@ function repeatedChildren(parent: Element): Element[] {
     .sort((left, right) => right.length - left.length)[0] ?? [];
 }
 
+/**
+ * Site chrome repeats just like content does, so a naive repeated-structure
+ * scan turns every nav bar and table of contents into a "content" tool.
+ */
+const CHROME_SELECTOR = [
+  "nav",
+  "header",
+  "footer",
+  "aside",
+  "[role='navigation']",
+  "[role='banner']",
+  "[role='contentinfo']",
+  "[role='menu']",
+  "[role='menubar']",
+  "[role='tablist']",
+  "[class*='breadcrumb']",
+  "[class*='pagination']",
+  "[id='toc']",
+  "[class*='toc-']",
+  "[class*='navbox']",
+].join(", ");
+
+const CONTENT_SELECTOR = "main, [role='main'], article, #content, #mw-content-text";
+
+function isChrome(element: Element): boolean {
+  const chrome = element.closest(CHROME_SELECTOR);
+  if (!chrome) return false;
+  const content = element.closest(CONTENT_SELECTOR);
+  // An outer chrome wrapper must not disqualify the article it contains, but a
+  // nav that sits inside the article is still chrome.
+  if (!content) return true;
+  return content.contains(chrome) && chrome !== content;
+}
+
 function collectionCandidates(root: ParentNode): CollectionCandidate[] {
   const candidates: CollectionCandidate[] = [];
   const claimed = new Set<Element>();
@@ -83,7 +121,7 @@ function collectionCandidates(root: ParentNode): CollectionCandidate[] {
       (child) => child.matches("li, [role='listitem']") && isElementVisible(child),
     );
     if (items.length < 3) continue;
-    candidates.push({ parent: list, items, inferredFromClasses: false });
+    candidates.push({ parent: list, items, inferredFromClasses: false, chrome: isChrome(list) });
     items.forEach((item) => claimed.add(item));
   }
 
@@ -98,7 +136,7 @@ function collectionCandidates(root: ParentNode): CollectionCandidate[] {
     if (candidates.some((candidate) => candidate.items.includes(parent))) {
       continue;
     }
-    candidates.push({ parent, items, inferredFromClasses: true });
+    candidates.push({ parent, items, inferredFromClasses: true, chrome: isChrome(parent) });
     items.forEach((item) => claimed.add(item));
   }
 
@@ -169,13 +207,18 @@ function itemSelector(parentSelector: string, items: Element[]): string {
 }
 
 function snapshotCollections(root: ParentNode): CollectionSnapshot[] {
-  return collectionCandidates(root).map(({ parent, items, inferredFromClasses }) => {
+  return collectionCandidates(root).map(({ parent, items, inferredFromClasses, chrome }) => {
     const parentSelector = createSelector(parent);
-    const label = findSectionLabel(parent, items[0]?.tagName.toLowerCase() ?? "items");
+    const described = describeSectionLabel(
+      parent,
+      items[0]?.tagName.toLowerCase() ?? "items",
+    );
     const selector = parentSelector.selector;
     return {
       id: stableId("collection", selector),
-      label,
+      label: described.label,
+      chrome,
+      labelSource: described.source,
       selector,
       itemSelector: itemSelector(selector, items),
       count: items.length,
@@ -237,7 +280,7 @@ function snapshotTableRows(
 function snapshotTables(root: ParentNode): TableSnapshot[] {
   const tables: TableSnapshot[] = [];
   for (const element of root.querySelectorAll("table")) {
-    if (!isElementVisible(element)) continue;
+    if (!isElementVisible(element) || isChrome(element)) continue;
     const table = element as HTMLTableElement;
     const { columns, headerRow } = tableColumns(table);
     if (!headerRow || columns.length === 0) continue;
@@ -397,6 +440,67 @@ function snapshotLocalActions(root: ParentNode): LocalActionSnapshot[] {
   return actions.slice(0, 2);
 }
 
+const ACTION_VERB =
+  /\b(add|buy|order|checkout|subscribe|sign up|join|book|reserve|delete|remove|send|post|submit|save|apply|download|donate|pay)\b/i;
+
+/** Text that tells one repeated control apart from its twenty siblings. */
+function distinguishingKey(control: Element): string | null {
+  let node: Element | null = control;
+  for (let depth = 0; node && depth < 6; depth += 1) {
+    const titled = node.querySelector("[title]")?.getAttribute("title");
+    if (titled) return sanitizePageText(titled, 90);
+    const heading = node.querySelector("h1, h2, h3, h4, h5, h6");
+    if (heading?.textContent) return sanitizePageText(heading.textContent, 90);
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * A write control is a real part of the page's surface even though an inert
+ * snapshot cannot perform it. Graft proposes the contract and says plainly that
+ * the owner still has to bind a handler.
+ */
+function snapshotActionCandidates(root: ParentNode): ActionCandidateSnapshot[] {
+  const groups = new Map<string, { label: string; controls: Element[] }>();
+
+  for (const control of root.querySelectorAll(
+    "button, input[type='submit'], input[type='button'], [role='button']",
+  )) {
+    if (!isElementVisible(control) || isChrome(control)) continue;
+    const raw =
+      control.getAttribute("value") ??
+      getAccessibleName(control) ??
+      visibleText(control, 60);
+    const label = sanitizePageText(raw, 60);
+    if (!label || !ACTION_VERB.test(label)) continue;
+    const key = label.toLowerCase();
+    const group = groups.get(key) ?? { label, controls: [] };
+    group.controls.push(control);
+    groups.set(key, group);
+  }
+
+  const candidates: ActionCandidateSnapshot[] = [];
+  for (const [, group] of groups) {
+    const first = group.controls[0];
+    if (!first) continue;
+    const targets = group.controls
+      .map((control) => distinguishingKey(control))
+      .filter((value): value is string => Boolean(value));
+    const unique = [...new Set(targets)].slice(0, 25);
+    candidates.push({
+      id: stableId("action", group.label, String(group.controls.length)),
+      label: group.label,
+      verb: ACTION_VERB.exec(group.label)?.[0]?.toLowerCase() ?? "submit",
+      selector: createSelector(first).selector,
+      count: group.controls.length,
+      targets: group.controls.length > 1 ? unique : [],
+    });
+  }
+
+  return candidates.sort((a, b) => b.count - a.count).slice(0, 4);
+}
+
 function snapshotHeadings(root: ParentNode): PageSnapshot["headings"] {
   return [...root.querySelectorAll("h1, h2, h3, h4, h5, h6")]
     .filter(isElementVisible)
@@ -431,21 +535,43 @@ export function deriveSnapshot(root: ParentNode = document): PageSnapshot {
     tables: snapshotTables(root),
     searchForms: snapshotSearchForms(root),
     localActions: snapshotLocalActions(root),
+    actionCandidates: snapshotActionCandidates(root),
   };
 }
 
-export function collectionNoun(collection: CollectionSnapshot): string {
+export type CollectionNounSource = "row-key" | "row-fields" | "label" | "fallback";
+
+/**
+ * Where a noun came from decides how much it can be trusted. A noun read out of
+ * the rows themselves is evidence about content; one read off a class attribute
+ * is evidence about markup.
+ */
+export function collectionNounInfo(collection: CollectionSnapshot): {
+  noun: string;
+  source: CollectionNounSource;
+} {
   const keys = Object.keys(collection.rows[0]?.fields ?? {});
   const stableKey = keys.find((key) => /_(?:id|slug)$/.test(key));
-  if (stableKey) return pluralize(stableKey.replace(/_(?:id|slug)$/, ""));
-  if (keys.includes("price") || keys.includes("availability")) return "products";
-  return nounFromLabel(collection.label, "items");
+  if (stableKey) {
+    return { noun: pluralize(stableKey.replace(/_(?:id|slug)$/, "")), source: "row-key" };
+  }
+  if (keys.includes("price") || keys.includes("availability")) {
+    return { noun: "products", source: "row-fields" };
+  }
+  const fromLabel = nounFromLabel(collection.label, "items");
+  if (isStructuralNoun(fromLabel)) return { noun: "items", source: "fallback" };
+  return { noun: fromLabel, source: "label" };
+}
+
+export function collectionNoun(collection: CollectionSnapshot): string {
+  return collectionNounInfo(collection).noun;
 }
 
 export function tableNoun(table: TableSnapshot): string {
   const idColumn = table.columns.find((column) => /_id$/.test(column.key));
   if (idColumn) return pluralize(idColumn.key.replace(/_id$/, ""));
-  return nounFromLabel(table.label, "table");
+  const fromLabel = nounFromLabel(table.label, "rows");
+  return isStructuralNoun(fromLabel) ? "rows" : fromLabel;
 }
 
 export function searchNoun(form: SearchFormSnapshot): string {

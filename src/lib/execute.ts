@@ -776,6 +776,13 @@ export async function executeTool(
       return tableItemResult(tool, args, target as Element, maxChars);
     case "search":
       return searchResult(tool, args, root, target as Element, options, maxChars);
+    case "action_candidate":
+      return {
+        ok: false,
+        message:
+          "No handler is bound. Graft derived this contract from a page it does not own, and an inert snapshot cannot perform a write. Export the manifest and bind a handler in the owner site to make it callable.",
+        data: { boundHandler: false, control: tool.binding.controlSelector },
+      };
     case "local_cart":
       return localCartResult(tool, args, root, target as Element, maxChars);
     default: {
