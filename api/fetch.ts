@@ -1,11 +1,15 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import {
+  assertPublicHost,
+  IntakeError,
+  MAX_BYTES,
+  TIMEOUT_MS,
+  timeoutSignal,
+  UA,
+} from "./_net.js";
+import { renderWithBrowser } from "./_render.js";
 
-const MAX_BYTES = 3_000_000;
-const TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
 const MAX_STYLESHEETS = 4;
-const UA = "GraftBot/0.1 (+https://github.com/himanshu748/graft-webmcp) snapshot-compiler";
 
 const STRIPPED_HEADERS = [
   "content-security-policy",
@@ -17,35 +21,6 @@ const STRIPPED_HEADERS = [
   "permissions-policy",
   "set-cookie",
 ];
-
-/** Categories we refuse on principle, not because they are hard. */
-const DENY_PATTERNS = [
-  /(^|\.)(bank|banking|chase|wellsfargo|hsbc|barclays|citi)\./i,
-  /(^|\.)(paypal|stripe|venmo|wise)\.com$/i,
-  /(^|\.)(login|signin|auth|account|accounts|id)\./i,
-  /(^|\.)(gov|nhs)\.[a-z.]+$/i,
-  /(^|\.)(mail|inbox|webmail)\./i,
-];
-
-function isPrivateAddress(address: string): boolean {
-  if (isIP(address) === 6) {
-    const v6 = address.toLowerCase();
-    if (v6 === "::1" || v6 === "::") return true;
-    if (v6.startsWith("fc") || v6.startsWith("fd")) return true;
-    if (v6.startsWith("fe80")) return true;
-    if (v6.startsWith("::ffff:")) return isPrivateAddress(v6.slice(7));
-    return false;
-  }
-  const parts = address.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return true;
-  const [a, b] = parts;
-  if (a === 10 || a === 127 || a === 0) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  return false;
-}
 
 /**
  * A single-page app serves a shell and builds the page in the browser. Graft
@@ -62,60 +37,6 @@ function clientRenderedReport(html: string): { shell: boolean; textLength: numbe
   const hasStructure = /<(form|table|article|section)\b/i.test(body);
   const listCount = (body.match(/<li\b/gi) ?? []).length;
   return { shell: textLength < 400 && !hasStructure && listCount < 5, textLength };
-}
-
-class IntakeError extends Error {
-  constructor(
-    readonly status: number,
-    readonly reason: string,
-    message: string,
-    readonly detail?: string,
-  ) {
-    super(message);
-  }
-}
-
-/**
- * Server-side fetch is an SSRF surface, so every hop is validated rather than
- * only the URL the caller typed.
- */
-async function assertPublicHost(target: URL): Promise<void> {
-  if (target.protocol !== "https:" && target.protocol !== "http:") {
-    throw new IntakeError(400, "scheme", "Only http and https URLs can be compiled.");
-  }
-  const host = target.hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
-    throw new IntakeError(403, "private", "That host is not reachable from Graft.");
-  }
-  if (DENY_PATTERNS.some((pattern) => pattern.test(host))) {
-    throw new IntakeError(
-      403,
-      "denylisted",
-      "Graft does not compile authentication, banking, mail or government pages.",
-      "This is a policy choice, not a technical limit.",
-    );
-  }
-  if (isIP(host)) {
-    if (isPrivateAddress(host)) {
-      throw new IntakeError(403, "private", "That address is inside a private network.");
-    }
-    return;
-  }
-  let resolved: Array<{ address: string }>;
-  try {
-    resolved = await lookup(host, { all: true });
-  } catch {
-    throw new IntakeError(400, "dns", `Could not resolve ${host}.`);
-  }
-  if (resolved.some((entry) => isPrivateAddress(entry.address))) {
-    throw new IntakeError(403, "private", "That host resolves to a private address.");
-  }
-}
-
-function timeoutSignal(ms: number): AbortSignal {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), ms).unref?.();
-  return controller.signal;
 }
 
 /** Minimal robots.txt evaluation for the wildcard and GraftBot agents. */
@@ -173,16 +94,50 @@ async function fetchFollowing(start: URL): Promise<{ response: Response; finalUr
   throw new IntakeError(400, "redirects", "That URL redirected too many times.");
 }
 
-async function readCapped(response: Response): Promise<string> {
+/**
+ * A chunked response has no content-length to check, so the cap is enforced
+ * while reading. Buffering first and measuring afterwards is how a function
+ * runs out of memory.
+ */
+async function readCapped(response: Response, limit = MAX_BYTES): Promise<string> {
   const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_BYTES) {
+  if (declared > limit) {
     throw new IntakeError(413, "too-large", "That page is larger than Graft's 3 MB snapshot limit.");
   }
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength > MAX_BYTES) {
-    throw new IntakeError(413, "too-large", "That page is larger than Graft's 3 MB snapshot limit.");
+
+  const body = response.body;
+  if (!body) return "";
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        throw new IntakeError(
+          413,
+          "too-large",
+          "That page is larger than Graft's 3 MB snapshot limit.",
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
   }
-  return new TextDecoder("utf-8").decode(buffer);
+
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8").decode(joined);
 }
 
 /**
@@ -210,13 +165,25 @@ async function inlineStylesheets(html: string, base: URL): Promise<{ html: strin
   const sheets = await Promise.all(
     hrefs.map(async (href) => {
       try {
-        const response = await fetch(href, {
-          headers: { "user-agent": UA },
-          signal: timeoutSignal(6000),
-        });
-        if (!response.ok) return "";
-        const text = await response.text();
-        return text.length > 400_000 ? "" : text;
+        // A stylesheet href is attacker-controlled just like the page URL, and
+        // an unvalidated fetch here would reopen the SSRF the main path closes.
+        let current = new URL(href);
+        for (let hop = 0; hop <= 2; hop += 1) {
+          await assertPublicHost(current);
+          const response = await fetch(current, {
+            redirect: "manual",
+            headers: { "user-agent": UA },
+            signal: timeoutSignal(6000),
+          });
+          const location = response.headers.get("location");
+          if (response.status >= 300 && response.status < 400 && location) {
+            current = new URL(location, current);
+            continue;
+          }
+          if (!response.ok) return "";
+          return await readCapped(response, 400_000);
+        }
+        return "";
       } catch {
         return "";
       }
@@ -234,8 +201,13 @@ async function inlineStylesheets(html: string, base: URL): Promise<{ html: strin
   return { html: next, inlined: sheets.filter(Boolean).length };
 }
 
+function renderEnabled(): boolean {
+  return process.env.GRAFT_RENDER !== "0";
+}
+
 export default async function handler(req: any, res: any) {
-  res.setHeader("cache-control", "public, max-age=0, s-maxage=300, stale-while-revalidate=600");
+  // Target content is never cached. The trust claim depends on this line.
+  res.setHeader("cache-control", "no-store");
 
   const raw = typeof req.query?.url === "string" ? req.query.url : "";
   if (!raw) {
@@ -287,28 +259,48 @@ export default async function handler(req: any, res: any) {
 
     const body = await readCapped(response);
 
+    let markup = body;
+    let source: "html" | "browser" = "html";
     const rendered = clientRenderedReport(body);
+
     if (rendered.shell) {
-      throw new IntakeError(
-        422,
-        "client-rendered",
-        "That page builds itself with JavaScript, so there is nothing to compile.",
-        `Graft reads the HTML the server sends and never executes target scripts. This one returned ${rendered.textLength} characters of text. Server-rendered pages work best.`,
-      );
+      // The server sent a shell. Executing the page is the only way to see it,
+      // so it is attempted here rather than at the top: a page that renders on
+      // the server never pays this cost.
+      const painted = renderEnabled()
+        ? await renderWithBrowser(finalUrl)
+        : null;
+      const paintedReport = painted ? clientRenderedReport(painted) : null;
+
+      if (!painted || paintedReport?.shell) {
+        throw new IntakeError(
+          422,
+          "client-rendered",
+          "That page builds itself with JavaScript, and rendering it produced nothing to compile.",
+          renderEnabled()
+            ? `Graft loaded the page in a headless browser and still read only ${paintedReport?.textLength ?? 0} characters of text. It may require sign-in, or block automated browsers.`
+            : `Graft read the HTML the server sends and got ${rendered.textLength} characters of text. Browser rendering is disabled on this deployment.`,
+        );
+      }
+
+      markup = painted;
+      source = "browser";
     }
 
     const stripped = STRIPPED_HEADERS.filter((header) => response.headers.has(header));
-    const { html, inlined } = await inlineStylesheets(body, finalUrl);
-    const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1]?.trim().slice(0, 200);
+    const { html, inlined } =
+      source === "browser" ? { html: markup, inlined: 0 } : await inlineStylesheets(markup, finalUrl);
+    const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(markup)?.[1]?.trim().slice(0, 200);
 
     res.status(200).json({
       ok: true,
       html,
       finalUrl: finalUrl.href,
       title: title || finalUrl.hostname,
-      bytes: body.length,
+      bytes: markup.length,
       strippedHeaders: stripped,
       inlinedStylesheets: inlined,
+      source,
     });
   } catch (error) {
     if (error instanceof IntakeError) {

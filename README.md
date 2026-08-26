@@ -175,13 +175,17 @@ docs/DEMO_RUNBOOK.md    exact sub-three-minute recording path
 
 ## Safety model
 
-- No arbitrary URL proxy and no third-party live page execution
+- Intake reads a page, it does not proxy one. Nothing is re-served under Graft's origin and the target's own scripts never run in your tab
+- Target content is never cached. The intake response is `no-store` at the edge and nothing is written to disk
+- Pages that need JavaScript are rendered in a sandboxed headless browser on the server, with credentials off, downloads off, dialogs dismissed and private-network subresources blocked. Nothing rendered there reaches your browser as executable code
+- Every outbound fetch, including each external stylesheet, revalidates the host on every redirect hop against private and link-local ranges
 - No imported scripts, inline event handlers, embedded documents or active form destinations
 - No cookies, credentials, authenticated state or remote registry
 - Snapshot text is bounded and always treated as untrusted content
 - Derived contracts map only to built-in recipe executors, never `eval` or imported behavior
 - Ambiguous tools are held and stale bindings fail closed
 - `add_to_demo_cart` is the only mutation: allowlisted fixture product, quantity 1 to 3, human confirmation and in-memory state only
+- A write contract derived from a page Graft does not own is always held, never registered automatically, and returns an explicit unbound-handler error if called
 - Export is a reviewed migration starting point and still requires owner implementation, security review and integration tests
 
 ## Challenge fit

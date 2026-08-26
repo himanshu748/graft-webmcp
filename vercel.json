@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/fetch.ts": {
-      "maxDuration": 20
+      "maxDuration": 60
     }
   }
 }

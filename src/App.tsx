@@ -1737,7 +1737,7 @@ export function App() {
 
       <footer className="site-footer">
         <div className="page-container footer-inner">
-          <span>Graft · Open source · Owned fixtures only</span>
+          <span>Graft · Open source · Reads pages, never proxies them</span>
           <a
             href="https://webmachinelearning.github.io/webmcp/"
             target="_blank"

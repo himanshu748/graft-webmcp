@@ -13,7 +13,7 @@ Repo: https://github.com/himanshu748/graft-webmcp
 
 ### Why this is a strong fit for WebMCP
 
-WebMCP has a supply problem, not a demand problem. The clients arrived: Chrome ships the origin trial, Edge has it behind a flag, and the ChatGPT desktop in-app browser speaks it. The supply did not. The WebMCP Directory, the closest thing to a census, lists roughly 300 sites. There are a few hundred million websites.
+WebMCP has a supply problem, not a demand problem. The clients arrived: Chrome ships the origin trial, Edge has it behind a flag, and the ChatGPT desktop in-app browser speaks it. The supply did not. The WebMCP Directory at webmcp.com, the closest thing to a public census, listed 306 sites when this was built. Every other site on the web exposes nothing.
 
 Every tool that exists today sits on the same side of the fence. It helps a site owner add tools to code they own. Graft removes the owner from the loop: paste any public URL and the page becomes a set of typed, reviewable WebMCP contracts without asking the site for anything.
 
@@ -31,13 +31,13 @@ The human stays in the loop where it matters and gets out of the way where it do
 
 Point an agent at a site that has never heard of WebMCP and have it work from a real contract instead of a guess.
 
-On `books.toscrape.com`, Graft derives `list_products`, `get_product`, `list_navigation` and an `add_to_basket` write candidate. On `python.org` it derives ten tools including `search_this_site`, `list_latest_news` and `list_upcoming_events` with matching detail tools. Neither site knows Graft exists.
+On `books.toscrape.com`, Graft derives six contracts: five that register, including `list_products`, `get_product` and `list_navigation`, plus an `add_to_basket` write candidate that is held for review rather than registered. On `python.org` it derives ten tools including `search_this_site`, `list_latest_news` and `list_upcoming_events` with matching detail tools. Neither site knows Graft exists.
 
 The reviewed result exports as a manifest plus a `registerGraftTools(handlers)` adapter, so the same pass that makes a page agent-usable today is the migration artifact the owner ships tomorrow. Discover with Graft, harden in your own repo.
 
 ### Implementation approach
 
-A server endpoint reads the target page once, strips the response headers that block embedding, inlines external stylesheets, and returns the markup. It never forwards cookies or credentials, never caches target content, honours `robots.txt`, refuses auth, banking, mail and government domains by policy, and revalidates every redirect hop against private address ranges so the fetch cannot be turned into an SSRF.
+A server endpoint reads the target page once, strips the response headers that block embedding, inlines external stylesheets, and returns the markup. It never forwards cookies or credentials, never caches target content (`no-store`, nothing on disk), honours `robots.txt`, and refuses auth, banking, mail and government domains by policy. Every outbound request, the page and each external stylesheet alike, revalidates its host on every redirect hop against private and link-local ranges, because a stylesheet href is attacker-controlled too.
 
 The client sanitizes that markup into an inert snapshot, removing scripts, frames and every network-capable attribute, then compiles it. Nine recipes cover search forms, repeated content regions, data tables, navigation, page structure and write controls. Site chrome is excluded from content recipes, because a nav bar repeats exactly like a product grid does.
 
@@ -47,7 +47,7 @@ Approved tools register through `document.modelContext.registerTool` with an `Ab
 
 ### Honest limits
 
-Measured, not asserted. Semantic sites compile well. Sites behind bot protection refuse the read: Stack Overflow answers 403 and Allrecipes answers 402, and Graft reports what happened instead of spinning. Heavily client-rendered pages give up little, because the server receives a shell. Where derivation is weak the confidence gate holds or rejects the candidate rather than shipping a tool an agent cannot aim.
+Measured, not asserted. Semantic sites compile well. Sites behind bot protection refuse the read: Stack Overflow answers 403 and Allrecipes answers 402, and Graft reports what happened instead of spinning. When a page returns a shell, Graft renders it in a sandboxed headless browser and compiles the result. If that still yields nothing, it says so and names the character count it read. Where derivation is weak the confidence gate holds or rejects the candidate rather than shipping a tool an agent cannot aim.
 
 ---
 
@@ -56,10 +56,10 @@ Measured, not asserted. Semantic sites compile well. Sites behind bot protection
 Record in the ChatGPT desktop in-app browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled, so tools actually register. Keep the URL bar visible throughout. No cuts inside an agent call.
 
 **0:00 to 0:20. The problem.**
-Open `books.toscrape.com` directly. Ask the agent to find the cheapest in-stock book. It guesses or fumbles. Say the line: roughly 300 sites speak WebMCP, and there are a few hundred million websites.
+Open `books.toscrape.com` directly. Ask the agent to find the cheapest in-stock book. It guesses or fumbles. Say the line: the WebMCP directory listed 306 sites when this was built, and this is not one of them.
 
 **0:20 to 1:05. The graft.**
-Open Graft. It has already compiled that same site. Six tools. Open `list_products` and show the schema, the annotations, and the confidence reasons. Ask the agent the same question, word for word. It calls the tool and answers. Expand the call to show exact arguments and returned rows.
+Open Graft. It has already compiled that same site: five registered tools and one held candidate. Open `list_products` and show the schema, the annotations, and the confidence reasons. Ask the agent the same question, word for word. It calls the tool and answers. Expand the call to show exact arguments and returned rows.
 
 **1:05 to 1:35. Generality.**
 Paste `https://www.python.org` into the field. Ten tools appear, including `search_this_site` and `list_upcoming_events`. This is the beat that proves it is a compiler and not three hardcoded demos.
