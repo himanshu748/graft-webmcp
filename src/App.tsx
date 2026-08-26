@@ -23,6 +23,15 @@ import {
   type FixtureId,
 } from "./data/fixtures";
 import {
+  fetchLiveSource,
+  fixtureSource,
+  IntakeRequestError,
+  livePresets,
+  pasteSource,
+  type ActiveSource,
+  type IntakeFailure,
+} from "./data/sources";
+import {
   compileDocument,
   coerceToolArguments,
   executeTool,
@@ -40,6 +49,14 @@ import {
 import { buildAdapterModule } from "./export-adapter";
 
 type CompilePhase = "ready" | "compiling" | "complete" | "error";
+type IntakeMode = "live" | "paste" | "fixture";
+type IntakeStatus = "idle" | "loading";
+
+const INTAKE_MODES: Array<{ id: IntakeMode; label: string }> = [
+  { id: "live", label: "Live URL" },
+  { id: "paste", label: "Paste HTML" },
+  { id: "fixture", label: "Owned fixture" },
+];
 type MobileBenchView = "preview" | "tools";
 type RunState = "success" | "error" | "cancelled";
 
@@ -164,9 +181,9 @@ function isStoredToolReview(value: unknown): value is StoredToolReview {
   return true;
 }
 
-function storedReviews(fixtureId: FixtureId): Record<string, StoredToolReview> {
+function storedReviews(sourceKey: string): Record<string, StoredToolReview> {
   try {
-    const stored = window.localStorage.getItem(`graft:review:${fixtureId}`);
+    const stored = window.localStorage.getItem(`graft:review:${sourceKey}`);
     if (!stored) return {};
     const parsed = JSON.parse(stored) as unknown;
     if (!parsed || typeof parsed !== "object") return {};
@@ -184,7 +201,7 @@ function storedReviews(fixtureId: FixtureId): Record<string, StoredToolReview> {
   }
 }
 
-function persistReviews(fixtureId: FixtureId, tools: GraftTool[]): void {
+function persistReviews(sourceKey: string, tools: GraftTool[]): void {
   const reviews = Object.fromEntries(
     tools
       .filter((tool) => tool.origin === "human")
@@ -200,15 +217,16 @@ function persistReviews(fixtureId: FixtureId, tools: GraftTool[]): void {
   );
   const envelope: StoredReviewEnvelope = { version: 1, tools: reviews };
   window.localStorage.setItem(
-    `graft:review:${fixtureId}`,
+    `graft:review:${sourceKey}`,
     JSON.stringify(envelope),
   );
 }
 
 function registrationLabel(report: ToolRegistrationReport): string {
-  if (!report.available) return "Local preview";
+  if (!report.available) return "WebMCP not detected";
   if (report.failures.length > 0) return "Registration issue";
-  return `${report.registered.length} tools connected`;
+  if (report.registered.length === 0) return "WebMCP ready";
+  return `${report.registered.length} tools live`;
 }
 
 function statusLabel(status: GraftTool["status"]): string {
@@ -364,8 +382,13 @@ export function App() {
   const initialFixture = fixtureDefinitions[0]?.id ?? "catalog";
   const [selectedFixtureId, setSelectedFixtureId] =
     useState<FixtureId>(initialFixture);
-  const [compiledFixtureId, setCompiledFixtureId] =
-    useState<FixtureId | null>(null);
+  const [compiledSourceKey, setCompiledSourceKey] = useState<string | null>(null);
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>("live");
+  const [urlInput, setUrlInput] = useState(livePresets[0]?.url ?? "");
+  const [pasteInput, setPasteInput] = useState("");
+  const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>("idle");
+  const [intakeFailure, setIntakeFailure] = useState<IntakeFailure | null>(null);
+  const [activeSource, setActiveSource] = useState<ActiveSource | null>(null);
   const [phase, setPhase] = useState<CompilePhase>("ready");
   const [compileStage, setCompileStage] = useState(0);
   const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
@@ -473,29 +496,31 @@ export function App() {
     [addTimelineEntry],
   );
 
-  const compileSelected = useCallback(async () => {
+  const compileSource = useCallback(async (source: ActiveSource) => {
     const token = compileTokenRef.current + 1;
     compileTokenRef.current = token;
     setPhase("compiling");
     setCompileStage(0);
     setError(null);
     setMobileView("tools");
+    setActiveSource(source);
+    const sourceKey = source.kind === "fixture" ? source.id : source.sourceUrl;
 
     try {
       await WAIT(100);
       if (compileTokenRef.current !== token) return;
-      const fixture = getFixture(selectedFixtureId);
-      const sanitized = sanitizeFixtureHtml(fixture.html);
+      const sanitized = sanitizeFixtureHtml(source.html);
       const sourceDocument = sanitized.document;
       setCompileStage(1);
 
       await WAIT(140);
       if (compileTokenRef.current !== token) return;
       const compilation = compileDocument(sourceDocument);
-      const missingTools = missingExpectedTools(
-        fixture.expectedTools,
-        compilation.tools,
-      );
+      // Only owned fixtures carry a contract. A live page owes us nothing.
+      const missingTools =
+        source.kind === "fixture"
+          ? missingExpectedTools(getFixture(source.id as FixtureId).expectedTools, compilation.tools)
+          : [];
       if (missingTools.length > 0) {
         const previousRegistry = registryRef.current;
         registryRef.current = null;
@@ -509,7 +534,7 @@ export function App() {
           `Fixture contract mismatch: missing ${missingTools.join(", ")}. Registration blocked.`,
         );
       }
-      const reviews = storedReviews(selectedFixtureId);
+      const reviews = storedReviews(sourceKey);
       const reviewedTools: GraftTool[] = compilation.tools.map((tool) => {
         const review = reviews[tool.id];
         if (!review) return tool;
@@ -540,7 +565,7 @@ export function App() {
         removedAttributes: sanitized.removedAttributes,
         neutralizedCssReferences: sanitized.neutralizedCssReferences,
       });
-      setCompiledFixtureId(selectedFixtureId);
+      setCompiledSourceKey(sourceKey);
       setCompileStage(2);
 
       const previousRegistry = registryRef.current;
@@ -566,12 +591,80 @@ export function App() {
       setPhase("error");
       setError(caught instanceof Error ? caught.message : "Compilation failed.");
     }
-  }, [handleLifecycleEvent, requestConfirmation, selectedFixtureId]);
+  }, [handleLifecycleEvent, requestConfirmation]);
 
+  const runLiveIntake = useCallback(
+    async (rawUrl: string) => {
+      const target = rawUrl.trim();
+      if (!target) return;
+      setIntakeStatus("loading");
+      setIntakeFailure(null);
+      setPhase("compiling");
+      setCompileStage(0);
+      try {
+        const source = await fetchLiveSource(target);
+        setUrlInput(source.sourceUrl);
+        await compileSource(source);
+      } catch (caught) {
+        const failure: IntakeFailure =
+          caught instanceof IntakeRequestError
+            ? caught.failure
+            : {
+                reason: "network",
+                message: "Graft could not reach that page.",
+                detail: caught instanceof Error ? caught.message : undefined,
+              };
+        setIntakeFailure(failure);
+        setPhase("ready");
+      } finally {
+        setIntakeStatus("idle");
+      }
+    },
+    [compileSource],
+  );
+
+  const compileActiveIntake = useCallback(() => {
+    setIntakeFailure(null);
+    if (intakeMode === "live") return void runLiveIntake(urlInput);
+    if (intakeMode === "paste") {
+      if (!pasteInput.trim()) {
+        setIntakeFailure({
+          reason: "empty",
+          message: "Paste some HTML first.",
+          detail: "Anything with a form, list or table will produce tools.",
+        });
+        return;
+      }
+      return void compileSource(pasteSource(pasteInput));
+    }
+    return void compileSource(fixtureSource(selectedFixtureId));
+  }, [compileSource, intakeMode, pasteInput, runLiveIntake, selectedFixtureId, urlInput]);
+
+  // First paint compiles a real page, not a fixture. The fixture is the
+  // fallback so the bench is never empty if the network is unavailable.
+  const bootedRef = useRef(false);
   useEffect(() => {
-    const timer = window.setTimeout(() => void compileSelected(), 80);
-    return () => window.clearTimeout(timer);
-  }, [compileSelected]);
+    if (bootedRef.current) return;
+    bootedRef.current = true;
+    const boot = async () => {
+      const preset = livePresets[0];
+      if (!preset) return void compileSource(fixtureSource(selectedFixtureId));
+      try {
+        const source = await fetchLiveSource(preset.url);
+        setUrlInput(source.sourceUrl);
+        await compileSource(source);
+      } catch {
+        setIntakeMode("fixture");
+        setIntakeFailure({
+          reason: "boot",
+          message: "Live intake is unavailable right now.",
+          detail: "Graft loaded an owned fixture instead. The compiler is identical.",
+        });
+        await compileSource(fixtureSource(selectedFixtureId));
+      }
+    };
+    void boot();
+  }, [compileSource, selectedFixtureId]);
 
   useEffect(() => {
     pendingConfirmationRef.current = pendingConfirmation;
@@ -602,7 +695,7 @@ export function App() {
     setTools(nextTools);
 
     try {
-      persistReviews(selectedFixtureId, nextTools);
+      persistReviews(compiledSourceKey ?? selectedFixtureId, nextTools);
     } catch {
       setError("The browser blocked local review persistence.");
     }
@@ -653,7 +746,7 @@ export function App() {
     setEditingToolId(null);
     setError(null);
     try {
-      persistReviews(selectedFixtureId, nextTools);
+      persistReviews(compiledSourceKey ?? selectedFixtureId, nextTools);
     } catch {
       setError("The browser blocked local review persistence.");
     }
@@ -729,10 +822,11 @@ export function App() {
     const manifest = {
       product: "Graft",
       version: 1,
-      fixture: {
-        id: compiledFixtureId,
+      source: {
+        id: compiledSourceKey,
         title: snapshot.title,
-        source: "owned-static-fixture",
+        kind: activeSource?.kind ?? "fixture",
+        url: activeSource?.sourceUrl ?? "",
       },
       generatedAt: new Date().toISOString(),
       notice: "Migration starting point. Review and test in the owner site before shipping.",
@@ -758,17 +852,23 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `graft-${compiledFixtureId ?? "adapter"}.js`;
+    anchor.download = `graft-${(compiledSourceKey ?? "adapter").replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}.js`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [compiledFixtureId, snapshot, tools]);
+  }, [activeSource, compiledSourceKey, snapshot, tools]);
 
   const schemaProperties = useMemo(
     () => Object.entries(selectedTool?.inputSchema.properties ?? {}),
     [selectedTool],
   );
 
-  const dirty = compiledFixtureId !== null && compiledFixtureId !== selectedFixtureId;
+  const pendingKey =
+    intakeMode === "live"
+      ? urlInput.trim()
+      : intakeMode === "paste"
+        ? "pasted-html"
+        : selectedFixtureId;
+  const dirty = compiledSourceKey !== null && compiledSourceKey !== pendingKey;
   const connected = registration.available && registration.failures.length === 0;
 
   return (
@@ -793,10 +893,7 @@ export function App() {
           </nav>
           <div className="connection-state" data-connected={connected} aria-live="polite">
             <span className="connection-light" aria-hidden="true" />
-            <span>
-              {registrationLabel(registration)}
-              <span className="connection-copy-long"> / runtime</span>
-            </span>
+            <span>{registrationLabel(registration)}</span>
           </div>
         </div>
       </header>
@@ -809,8 +906,9 @@ export function App() {
                 <p className="kicker">A tool layer for websites that never shipped one</p>
                 <h1 id="hero-title">Give the old web a governed tool layer.</h1>
                 <p className="hero-deck">
-                  Graft compiles a permitted page snapshot into typed WebMCP tools.
-                  Review every contract, register the safe ones and observe the exact call.
+                  Paste a URL. Graft reads the page once, strips every script and
+                  network attribute, then compiles what is left into typed WebMCP tools
+                  you can review, register and run.
                 </p>
               </div>
               <div className="hero-actions">
@@ -821,8 +919,8 @@ export function App() {
                 <a className="secondary-cta" href="#trust-title">Read the trust model</a>
               </div>
               <div className="hero-facts" aria-label="Product constraints">
-                <span><ShieldCheck size={16} weight="fill" aria-hidden="true" />Owned snapshots only</span>
-                <span><LockKey size={16} weight="fill" aria-hidden="true" />No credentials imported</span>
+                <span><ShieldCheck size={16} weight="fill" aria-hidden="true" />Any public page</span>
+                <span><LockKey size={16} weight="fill" aria-hidden="true" />No credentials forwarded</span>
               </div>
             </div>
             <figure className="hero-visual">
@@ -844,12 +942,14 @@ export function App() {
               </div>
               <figcaption>
                 <span>Semantic compile</span>
-                <strong>One snapshot. Three governed tools.</strong>
+                <strong>One page in. Typed contracts out.</strong>
               </figcaption>
               <div className="hero-index" aria-label="Current compilation summary">
                 <div className="hero-stat">
-                  <span>Fixtures</span>
-                  <strong>{String(fixtureDefinitions.length).padStart(2, "0")}</strong>
+                  <span>Registered</span>
+                  <strong>
+                    {String(registration.registered.length).padStart(2, "0")}
+                  </strong>
                 </div>
                 <div className="hero-stat">
                   <span>Tools</span>
@@ -868,57 +968,230 @@ export function App() {
           <div className="page-container">
             <div className="section-intro">
               <div>
-                <p className="kicker">Controlled inputs</p>
-                <h2 id="source-title">Start with a page you own.</h2>
+                <p className="kicker">Intake</p>
+                <h2 id="source-title">Point Graft at a page.</h2>
               </div>
               <p className="section-description">
-                The challenge build uses local fixtures so the entire compile can be inspected
-                without importing scripts, cookies or network behavior.
+                Graft reads the page once on the server, strips every script, frame and
+                network attribute, then compiles what is left. Nothing you type is stored
+                and no credentials are ever forwarded.
               </p>
             </div>
 
-            <div className="source-rack" aria-label="Owned demo fixtures">
-              {fixtureDefinitions.map((fixture) => (
+            <div className="intake-modes" role="group" aria-label="Intake method">
+              {INTAKE_MODES.map((mode) => (
                 <button
-                  key={fixture.id}
+                  key={mode.id}
                   type="button"
-                  className="source-preset"
-                  aria-pressed={selectedFixtureId === fixture.id}
-                  onClick={() => setSelectedFixtureId(fixture.id)}
+                  className="intake-mode"
+                  aria-pressed={intakeMode === mode.id}
+                  onClick={() => {
+                    setIntakeMode(mode.id);
+                    setIntakeFailure(null);
+                  }}
                 >
-                  <span className="source-kind">{fixture.id.replace("-", " ")}</span>
-                  <span className="preset-content">
-                    <strong>{fixture.title}</strong>
-                    <span>{fixture.description}</span>
-                  </span>
-                  <span className="source-select" aria-hidden="true">Select</span>
+                  {mode.label}
                 </button>
               ))}
             </div>
 
-            <div className="compile-command">
-              <div className="source-address">
-                <LockKey size={18} weight="fill" aria-hidden="true" />
+            {intakeMode === "live" ? (
+              <form
+                className="intake-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  compileActiveIntake();
+                }}
+              >
+                <div className="intake-field">
+                  <label className="control-label" htmlFor="intake-url">
+                    Page URL
+                  </label>
+                  <input
+                    id="intake-url"
+                    className="intake-input"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    spellCheck={false}
+                    placeholder="https://books.toscrape.com"
+                    value={urlInput}
+                    onChange={(event) => setUrlInput(event.target.value)}
+                    aria-describedby="intake-help"
+                  />
+                </div>
+                <button
+                  className="compile-button"
+                  type="submit"
+                  disabled={intakeStatus === "loading" || phase === "compiling"}
+                  aria-busy={intakeStatus === "loading"}
+                >
+                  <Lightning size={18} weight="fill" aria-hidden="true" />
+                  {intakeStatus === "loading"
+                    ? "Reading page"
+                    : dirty
+                      ? "Compile this page"
+                      : "Recompile"}
+                </button>
+              </form>
+            ) : null}
+
+            {intakeMode === "live" ? (
+              <>
+                <p className="intake-help" id="intake-help">
+                  Any public HTML page works. Authentication, banking, mail and government
+                  domains are refused, and robots.txt is honoured.
+                </p>
+                <ul className="preset-rack" aria-label="Verified example pages">
+                  {livePresets.map((preset) => (
+                    <li key={preset.url}>
+                      <button
+                        type="button"
+                        className="source-preset"
+                        aria-current={urlInput.trim() === preset.url ? "true" : undefined}
+                        onClick={() => {
+                          setUrlInput(preset.url);
+                          void runLiveIntake(preset.url);
+                        }}
+                      >
+                        <span className="source-kind">{preset.posture}</span>
+                        <span className="preset-content">
+                          <strong>{preset.label}</strong>
+                          <span>{preset.note}</span>
+                        </span>
+                        <span className="source-select" aria-hidden="true">
+                          Compile
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+
+            {intakeMode === "paste" ? (
+              <div className="intake-form intake-form-stacked">
+                <div className="intake-field">
+                  <label className="control-label" htmlFor="intake-paste">
+                    HTML markup
+                  </label>
+                  <textarea
+                    id="intake-paste"
+                    className="intake-textarea"
+                    rows={8}
+                    spellCheck={false}
+                    placeholder="<main><h2>Products</h2><ul>...</ul></main>"
+                    value={pasteInput}
+                    onChange={(event) => setPasteInput(event.target.value)}
+                    aria-describedby="paste-help"
+                  />
+                </div>
+                <p className="intake-help" id="paste-help">
+                  Paste any markup, including a page you saved from your own site. It never
+                  leaves your browser.
+                </p>
+                <button
+                  className="compile-button"
+                  type="button"
+                  disabled={phase === "compiling"}
+                  onClick={compileActiveIntake}
+                >
+                  <Lightning size={18} weight="fill" aria-hidden="true" />
+                  Compile pasted HTML
+                </button>
+              </div>
+            ) : null}
+
+            {intakeMode === "fixture" ? (
+              <>
+                <ul className="preset-rack" aria-label="Owned demo fixtures">
+                  {fixtureDefinitions.map((fixture) => (
+                    <li key={fixture.id}>
+                      <button
+                        type="button"
+                        className="source-preset"
+                        aria-current={selectedFixtureId === fixture.id ? "true" : undefined}
+                        onClick={() => {
+                          setSelectedFixtureId(fixture.id);
+                          void compileSource(fixtureSource(fixture.id));
+                        }}
+                      >
+                        <span className="source-kind">{fixture.id.replace("-", " ")}</span>
+                        <span className="preset-content">
+                          <strong>{fixture.title}</strong>
+                          <span>{fixture.description}</span>
+                        </span>
+                        <span className="source-select" aria-hidden="true">
+                          Compile
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="intake-help">
+                  Fixtures are original pages bundled with Graft. They run the same compiler
+                  offline, which makes them useful when a live page is unreachable.
+                </p>
+              </>
+            ) : null}
+
+            {intakeFailure ? (
+              <div className="intake-failure" role="alert">
+                <WarningCircle size={20} weight="fill" aria-hidden="true" />
                 <div>
-                  <span className="control-label">Selected fixture</span>
-                  <div className="address-display">{selectedFixture.sourceUrl}</div>
+                  <strong>{intakeFailure.message}</strong>
+                  {intakeFailure.detail ? <p>{intakeFailure.detail}</p> : null}
+                  <div className="intake-failure-actions">
+                    {intakeMode === "live" ? (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void runLiveIntake(urlInput)}
+                      >
+                        Try again
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setIntakeFailure(null);
+                        setUrlInput(livePresets[0]?.url ?? "");
+                        void runLiveIntake(livePresets[0]?.url ?? "");
+                      }}
+                    >
+                      Use a verified page
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button
-                className="compile-button"
-                type="button"
-                disabled={phase === "compiling"}
-                aria-busy={phase === "compiling"}
-                onClick={() => void compileSelected()}
-              >
-                <Lightning size={18} weight="fill" aria-hidden="true" />
-                {phase === "compiling"
-                  ? "Compiling"
-                  : dirty
-                    ? "Compile selected fixture"
-                    : "Recompile snapshot"}
-              </button>
-            </div>
+            ) : null}
+
+            {activeSource ? (
+              <div className="source-address" aria-live="polite">
+                <LockKey size={18} weight="fill" aria-hidden="true" />
+                <div>
+                  <span className="control-label">Compiled source</span>
+                  <div className="address-display">{activeSource.sourceUrl}</div>
+                </div>
+                {activeSource.meta ? (
+                  <dl className="source-facts">
+                    <div>
+                      <dt>Read</dt>
+                      <dd>{Math.max(1, Math.round(activeSource.meta.bytes / 1024))} KB</dd>
+                    </div>
+                    <div>
+                      <dt>Headers stripped</dt>
+                      <dd>{activeSource.meta.strippedHeaders.length}</dd>
+                    </div>
+                    <div>
+                      <dt>Styles inlined</dt>
+                      <dd>{activeSource.meta.inlinedStylesheets}</dd>
+                    </div>
+                  </dl>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -960,6 +1233,23 @@ export function App() {
               </div>
             </div>
           </div>
+
+          {!registration.available && phase === "complete" ? (
+            <div className="runtime-notice">
+              <ShieldCheck size={20} weight="fill" aria-hidden="true" />
+              <div>
+                <strong>
+                  Tools compiled. This browser cannot register them natively.
+                </strong>
+                <p>
+                  Everything below is real derived output, and you can run each tool
+                  locally from the inspector. To let an agent call them, open this page in
+                  the ChatGPT desktop in-app browser, or in Chrome 149 or later with{" "}
+                  <code>chrome://flags/#enable-webmcp-testing</code> enabled.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {error && (
             <div className="system-error" role="alert">
@@ -1390,7 +1680,7 @@ export function App() {
                 <ShieldCheck size={20} weight="fill" aria-hidden="true" />
                 <div>
                   <strong>Inert by construction</strong>
-                  <p>Fixtures run without target scripts, network actions, cookies or credentials.</p>
+                  <p>Snapshots run without target scripts, network actions, cookies or credentials.</p>
                 </div>
               </div>
               <div className="trust-rule">

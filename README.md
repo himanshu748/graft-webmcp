@@ -2,13 +2,22 @@
 
 **A governed tool layer for websites that never shipped one.**
 
-Graft compiles an owned static page snapshot into explainable WebMCP tool candidates. A human can inspect the generated schemas, repair uncertain contracts, register approved tools in the browser and export the reviewed result as a starting point for owner-side integration.
+Paste any public URL. Graft reads that page once on the server, strips every script, frame and network attribute, then compiles what is left into typed WebMCP tool candidates. Each candidate carries a confidence score with its reasons, so you can see why a contract is trustworthy before you register it. Ambiguous tools are held for review instead of being registered silently.
 
-The challenge build is deliberately narrow: three original fixtures, no arbitrary-site proxy, no imported scripts, no credential forwarding and one confirmed local-only mutation.
+**Live:** https://graft-webmcp.vercel.app
+
+## What it does
+
+- **Live intake.** Any public HTML page. Authentication, banking, mail and government domains are refused by policy, private and link-local addresses are refused at every redirect hop, and `robots.txt` is honoured.
+- **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
+- **Explainable confidence.** A name lifted from a class attribute is not an accessible name, and the difference is scored. Every tool shows the evidence behind its number.
+- **Human repair.** Rename a tool, rewrite its description, then register it. Edits are stored per source and outrank re-derivation.
+- **Governed execution.** Read-only tools carry `readOnlyHint`, all snapshot-derived tools carry `untrustedContentHint`, and every call appears in a visible timeline with its exact arguments and result.
+- **Reviewed export.** Download the manifest and an `registerGraftTools(handlers)` adapter as a starting point for owner-side integration.
 
 ## What it proves
 
-- Useful WebMCP contracts can be proposed from semantic forms, repeated content and tables.
+- Useful WebMCP contracts can be proposed from semantic forms, repeated content and tables on pages nobody wrote for agents.
 - Confidence should be inspectable. Ambiguous tools are held instead of silently registered.
 - Snapshot-derived output can be registered with `untrustedContentHint` and safe tools with `readOnlyHint`.
 - A reviewed tool can execute through the browser's WebMCP surface with exact arguments and results visible in a local timeline.
@@ -16,18 +25,31 @@ The challenge build is deliberately narrow: three original fixtures, no arbitrar
 
 ## Judge path, under 60 seconds
 
-1. Open Graft in the ChatGPT desktop in-app browser. Alternatively, use Chrome 149 or later with `chrome://flags/#enable-webmcp-testing` enabled.
-2. Choose **Signal Cabinet** and compile the owned snapshot.
+1. Open https://graft-webmcp.vercel.app in the ChatGPT desktop in-app browser. Alternatively, use Chrome 149 or later with `chrome://flags/#enable-webmcp-testing` enabled.
+2. The page compiles `books.toscrape.com` on load. No setup, no sign-in, no key.
 3. Inspect `list_products`, including its schema, confidence reasons and annotations.
-4. Ask the agent: **“List the products in Signal Cabinet and tell me which one is cheapest.”**
-5. Confirm the answer identifies **Cable Dock 8 at $86**, then expand the successful call to see its arguments and returned data.
-6. Open `add_to_demo_cart`, edit its bounded name or description, then choose **Save and register** before confirming one local simulated cart action.
-7. Switch to **Basin Ledger** to see the same compiler produce a table-oriented tool set.
+4. Ask the agent: **"List the products on this page and tell me which one is cheapest."**
+5. Expand the successful call to see its arguments and returned data.
+6. Paste a URL of your own into the intake field and compile it.
+7. Switch to **Owned fixture** to see the same compiler run offline against bundled pages, including one confirmed local-only mutation.
 8. Export the reviewed contract.
 
 The interface remains usable when native WebMCP is unavailable, but it reports that state clearly and does not claim tools were registered.
 
-## Owned fixtures
+## Honest limits
+
+Measured against real pages, not asserted:
+
+- Semantic sites compile well. `python.org` yields `search_this_site`, `list_latest_news` and `list_upcoming_events`. `arxiv.org` yields `search_arxiv` and `list_recent_submissions`.
+- Sites behind bot protection refuse the read. Stack Overflow answers 403 and Allrecipes answers 402. Graft reports what happened instead of showing a spinner.
+- Heavily client-rendered pages give up little, because the server receives a shell rather than content. `github.com/trending` produces no useful list tool.
+- Where derivation is weak, the confidence gate holds or rejects the candidate rather than registering a tool an agent cannot aim.
+
+Graft never forwards cookies or credentials, never caches target content and never executes target scripts. Only the reviewed tool metadata is stored, in your own browser.
+
+## Bundled fixtures
+
+These ship with Graft so the compiler can be demonstrated offline, and so a judge is never blocked by a network failure. All fixture names, copy, marks and CSS are original.
 
 | Fixture | Semantic input | Expected tools |
 | --- | --- | --- |
@@ -35,7 +57,7 @@ The interface remains usable when native WebMCP is unavailable, but it reports t
 | **Mossbank Field Guide** | Search form, topic navigation, knowledge articles and glossary details | `search_field_guide`, `list_entries`, `read_entry` |
 | **Basin Ledger** | Filter form, captioned data table, typed values and dated records | `filter_batches`, `list_batches`, `get_batch` |
 
-All fixture names, copy, marks and CSS are original. Fixtures are static, inline and asset-free.
+Fixtures are static, inline and asset-free.
 
 ## How it works
 
@@ -51,7 +73,7 @@ owned fixture
   -> reviewed export
 ```
 
-The compiler core is source-agnostic, but P0 intake is fixture-only. Permissioned pasted HTML, snapshot upload and URL intake belong to the next product phase. They are not part of the submission claim.
+The compiler core is source-agnostic. Live URL intake, pasted markup and bundled fixtures all enter the same pipeline at the same point, which is why a fixture is a useful offline fallback rather than a separate code path.
 
 Local repair is intentionally bounded to a unique snake-case tool name and a 20 to 500 character description. Graft saves those fields plus publication status in a versioned fixture-scoped envelope. The downloaded adapter includes the full reviewed manifest, eligible descriptors and an async `registerGraftTools(handlers)` helper. It awaits native registration, reports missing handlers or failures, rolls back partial registration and exposes cleanup. Owners still provide every production handler and its tests.
 
@@ -65,7 +87,7 @@ const registration = new AbortController()
 
 await context.registerTool({
   name: 'list_products',
-  description: 'List products visible in the owned catalog fixture.',
+  description: 'List products visible on the compiled page.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -80,7 +102,7 @@ await context.registerTool({
   },
   execute: async (input, { signal }) => {
     signal.throwIfAborted()
-    return listOwnedFixtureProducts(input)
+    return listCompiledProducts(input)
   },
 }, { signal: registration.signal })
 ```
