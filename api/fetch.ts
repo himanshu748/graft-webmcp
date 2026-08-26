@@ -47,6 +47,23 @@ function isPrivateAddress(address: string): boolean {
   return false;
 }
 
+/**
+ * A single-page app serves a shell and builds the page in the browser. Graft
+ * reads server HTML, so there is genuinely nothing to compile. Saying that
+ * plainly beats showing an empty tool list and letting the user guess.
+ */
+function clientRenderedReport(html: string): { shell: boolean; textLength: number } {
+  const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html;
+  const stripped = body
+    .replace(/<(script|style|template|noscript)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+  const textLength = stripped.replace(/\s+/g, " ").trim().length;
+  const hasStructure = /<(form|table|article|section)\b/i.test(body);
+  const listCount = (body.match(/<li\b/gi) ?? []).length;
+  return { shell: textLength < 400 && !hasStructure && listCount < 5, textLength };
+}
+
 class IntakeError extends Error {
   constructor(
     readonly status: number,
@@ -269,6 +286,17 @@ export default async function handler(req: any, res: any) {
     }
 
     const body = await readCapped(response);
+
+    const rendered = clientRenderedReport(body);
+    if (rendered.shell) {
+      throw new IntakeError(
+        422,
+        "client-rendered",
+        "That page builds itself with JavaScript, so there is nothing to compile.",
+        `Graft reads the HTML the server sends and never executes target scripts. This one returned ${rendered.textLength} characters of text. Server-rendered pages work best.`,
+      );
+    }
+
     const stripped = STRIPPED_HEADERS.filter((header) => response.headers.has(header));
     const { html, inlined } = await inlineStylesheets(body, finalUrl);
     const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1]?.trim().slice(0, 200);

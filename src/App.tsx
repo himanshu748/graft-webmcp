@@ -52,6 +52,9 @@ type CompilePhase = "ready" | "compiling" | "complete" | "error";
 type IntakeMode = "live" | "paste" | "fixture";
 type IntakeStatus = "idle" | "loading";
 
+/** Reasons where a second attempt could plausibly succeed. */
+const RETRYABLE_REASONS = new Set(["network", "status", "boot", "dns", "redirects"]);
+
 const INTAKE_MODES: Array<{ id: IntakeMode; label: string }> = [
   { id: "live", label: "Live URL" },
   { id: "paste", label: "Paste HTML" },
@@ -1039,8 +1042,10 @@ export function App() {
             {intakeMode === "live" ? (
               <>
                 <p className="intake-help" id="intake-help">
-                  Any public HTML page works. Authentication, banking, mail and government
-                  domains are refused, and robots.txt is honoured.
+                  Any server-rendered public page works. Pages that build themselves with
+                  JavaScript return a shell, and Graft says so rather than showing an empty
+                  tool list. Authentication, banking, mail and government domains are
+                  refused, and robots.txt is honoured.
                 </p>
                 <ul className="preset-rack" aria-label="Verified example pages">
                   {livePresets.map((preset) => (
@@ -1142,7 +1147,7 @@ export function App() {
                   <strong>{intakeFailure.message}</strong>
                   {intakeFailure.detail ? <p>{intakeFailure.detail}</p> : null}
                   <div className="intake-failure-actions">
-                    {intakeMode === "live" ? (
+                    {intakeMode === "live" && RETRYABLE_REASONS.has(intakeFailure.reason) ? (
                       <button
                         type="button"
                         className="ghost-button"
