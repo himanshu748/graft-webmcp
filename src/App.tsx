@@ -48,6 +48,11 @@ import {
 } from "./sanitize";
 import { buildAdapterModule } from "./export-adapter";
 import { runLiveSearch } from "./liveSearch";
+import {
+  registerControlPlane,
+  type ControlPlaneSnapshot,
+} from "./controlPlane";
+import { getModelContext } from "./lib/webmcp";
 
 type CompilePhase = "ready" | "compiling" | "complete" | "error";
 type IntakeMode = "live" | "paste" | "fixture";
@@ -417,6 +422,19 @@ export function App() {
   const [draftToolName, setDraftToolName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
 
+  const controlStateRef = useRef<ControlPlaneSnapshot>({
+    sourceUrl: "",
+    sourceKind: "none",
+    phase: "ready",
+    tools: [],
+    registeredCount: 0,
+    webmcpAvailable: false,
+  });
+  const controlActionsRef = useRef<{
+    compile: (url: string) => Promise<void>;
+    setStatus: (name: string, status: "published" | "held") => Promise<void>;
+    exportAdapter: () => { fileName: string; toolCount: number; eligible: number } | null;
+  } | null>(null);
   const sourceDocumentRef = useRef<Document | null>(null);
   const registryRef = useRef<WebMCPRegistry | null>(null);
   const compileTokenRef = useRef(0);
@@ -671,6 +689,31 @@ export function App() {
     void boot();
   }, [compileSource, selectedFixtureId]);
 
+  // Graft compiles other sites into tools. This exposes Graft's own controls,
+  // so an agent can drive the product rather than only the page it compiled.
+  useEffect(() => {
+    const context = getModelContext();
+    if (!context) return;
+    const controller = new AbortController();
+    void registerControlPlane(
+      {
+        read: () => controlStateRef.current,
+        compileUrl: async (url: string) => {
+          await controlActionsRef.current?.compile(url);
+          return controlStateRef.current;
+        },
+        setCandidateStatus: async (name, status) => {
+          await controlActionsRef.current?.setStatus(name, status);
+          return controlStateRef.current;
+        },
+        exportAdapter: () => controlActionsRef.current?.exportAdapter() ?? null,
+      },
+      context,
+      controller.signal,
+    );
+    return () => controller.abort();
+  }, []);
+
   useEffect(() => {
     pendingConfirmationRef.current = pendingConfirmation;
   }, [pendingConfirmation]);
@@ -711,6 +754,33 @@ export function App() {
       setRegistration(registry.report);
     }
   }, [selectedFixtureId, selectedTool, tools]);
+
+  const setToolStatusByName = useCallback(
+    async (name: string, nextStatus: "published" | "held") => {
+      const target = tools.find((tool) => tool.name === name);
+      if (!target) throw new Error(`No candidate named ${name}.`);
+      if (target.status === "rejected") {
+        throw new Error(`${name} was rejected by the confidence gate and cannot be published.`);
+      }
+      const nextTools: GraftTool[] = tools.map((tool) =>
+        tool.id === target.id
+          ? { ...tool, status: nextStatus, origin: "human" as const }
+          : tool,
+      );
+      setTools(nextTools);
+      try {
+        persistReviews(compiledSourceKey ?? selectedFixtureId, nextTools);
+      } catch {
+        setError("The browser blocked local review persistence.");
+      }
+      const registry = registryRef.current;
+      if (registry) {
+        await registry.replace(nextTools);
+        setRegistration(registry.report);
+      }
+    },
+    [compiledSourceKey, selectedFixtureId, tools],
+  );
 
   const beginToolEdit = useCallback(() => {
     if (!selectedTool) return;
@@ -824,7 +894,7 @@ export function App() {
   }, [addTimelineEntry, argumentValues, requestConfirmation, selectedTool]);
 
   const exportAdapter = useCallback(() => {
-    if (!snapshot || tools.length === 0) return;
+    if (!snapshot || tools.length === 0) return null;
     const manifest = {
       product: "Graft",
       version: 1,
@@ -861,7 +931,31 @@ export function App() {
     anchor.download = `graft-${(compiledSourceKey ?? "adapter").replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}.js`;
     anchor.click();
     URL.revokeObjectURL(url);
+    return {
+      fileName: anchor.download,
+      toolCount: manifest.tools.length,
+      eligible: descriptors.length,
+    };
   }, [activeSource, compiledSourceKey, snapshot, tools]);
+
+  controlStateRef.current = {
+    sourceUrl: activeSource?.sourceUrl ?? "",
+    sourceKind: activeSource?.kind ?? "none",
+    phase,
+    tools,
+    registeredCount: registration.registered.length,
+    webmcpAvailable: registration.available,
+  };
+  controlActionsRef.current = {
+    compile: async (url: string) => {
+      setIntakeMode("live");
+      setUrlInput(url);
+      await runLiveIntake(url);
+    },
+    setStatus: setToolStatusByName,
+    exportAdapter,
+  };
+
 
   const schemaProperties = useMemo(
     () => Object.entries(selectedTool?.inputSchema.properties ?? {}),

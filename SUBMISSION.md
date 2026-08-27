@@ -37,6 +37,8 @@ On `books.toscrape.com`, Graft derives six contracts: five that register, includ
 
 The reviewed result exports as a manifest plus a `registerGraftTools(handlers)` adapter, so the same pass that makes a page agent-usable today is the migration artifact the owner ships tomorrow. Discover with Graft, harden in your own repo.
 
+Graft is also agent-operable as itself. It registers a control surface next to the tools it derives, so an agent can call `graft_compile_url("https://example.com")`, then `graft_list_candidates`, then `graft_inspect_candidate` to read the scored evidence, then `graft_set_candidate` to publish a held one. The agent drives Graft, and Graft makes any site drivable. Both layers run through the same WebMCP surface in the same tab.
+
 ### Implementation approach
 
 A server endpoint reads the target page once, strips the response headers that block embedding, inlines external stylesheets, and returns the markup. It never forwards cookies or credentials, never caches target content (`no-store`, nothing on disk), honours `robots.txt`, and refuses auth, banking, mail and government domains by policy. Hosts are resolved rather than pattern-matched, so a public name pointing at a private address is refused. Every outbound request, the page and each external stylesheet alike, revalidates its host on every redirect hop against private and link-local ranges, because a stylesheet href is attacker-controlled too.
@@ -69,8 +71,8 @@ Paste `https://www.python.org` into the field. Ten tools appear. Ask the agent t
 **1:35 to 2:10. Governance.**
 Show `add_to_basket` held at 55, and read its reason: a write contract with no bound handler is never registered automatically. Then paste a site that refuses, and show the failure card naming the cause.
 
-**2:10 to 2:40. Adoption.**
-Edit a tool description in the inspector, save and register, then export the adapter. Say the line: discover with Graft, harden in your own repo.
+**2:10 to 2:40. Graft operating itself.**
+Without touching the interface, ask the agent to compile a different URL through `graft_compile_url`, list the candidates and publish a held one. The page updates as the agent works. Then `graft_export_adapter`. Say the line: discover with Graft, harden in your own repo.
 
 **2:40 to 3:00. The claim.**
 Back to the tool count. The clients arrived. The supply did not. Graft is the supply side.
