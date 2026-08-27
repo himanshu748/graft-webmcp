@@ -28,6 +28,7 @@ import {
   IntakeRequestError,
   livePresets,
   pasteSource,
+  shouldCompileFixtureOnModeSelection,
   type ActiveSource,
   type IntakeFailure,
 } from "./data/sources";
@@ -232,16 +233,13 @@ function persistReviews(sourceKey: string, tools: GraftTool[]): void {
   );
 }
 
-/**
- * Derived tools and Graft's own controls register through separate paths, so
- * counting only the registry undercounts what the browser actually sees.
- */
-function registrationLabel(report: ToolRegistrationReport, controlCount: number): string {
+function controlRegistrationLabel(
+  report: ToolRegistrationReport,
+  controlCount: number,
+): string {
+  if (controlCount > 0) return `${controlCount} Graft tools live`;
   if (!report.available) return "WebMCP not detected";
-  if (report.failures.length > 0) return "Registration issue";
-  const total = report.registered.length + controlCount;
-  if (total === 0) return "WebMCP ready";
-  return `${total} tools live`;
+  return "Graft tools pending";
 }
 
 function statusLabel(status: GraftTool["status"]): string {
@@ -1021,7 +1019,7 @@ export function App() {
         ? "pasted-html"
         : selectedFixtureId;
   const dirty = compiledSourceKey !== null && compiledSourceKey !== pendingKey;
-  const connected = registration.available && registration.failures.length === 0;
+  const connected = controlToolNames.length === CONTROL_TOOLS.length;
 
   return (
     <div className="app-shell">
@@ -1032,7 +1030,9 @@ export function App() {
       <header className="topbar">
         <div className="topbar-inner">
           <a className="brand-lockup" href="#top" aria-label="Graft home">
-            <span className="brand-mark" aria-hidden="true">G/</span>
+            <span className="brand-mark" aria-hidden="true">
+              <img src="/graft-mark.png" alt="" width="36" height="36" />
+            </span>
             <span className="brand-copy">
               <span className="brand-word">Graft</span>
               <span className="brand-descriptor">WebMCP compatibility compiler</span>
@@ -1045,7 +1045,7 @@ export function App() {
           </nav>
           <div className="connection-state" data-connected={connected} aria-live="polite">
             <span className="connection-light" aria-hidden="true" />
-            <span>{registrationLabel(registration, controlToolNames.length)}</span>
+            <span>{controlRegistrationLabel(registration, controlToolNames.length)}</span>
           </div>
         </div>
       </header>
@@ -1140,6 +1140,11 @@ export function App() {
                   onClick={() => {
                     setIntakeMode(mode.id);
                     setIntakeFailure(null);
+                    if (
+                      shouldCompileFixtureOnModeSelection(mode.id, activeSource?.kind)
+                    ) {
+                      void compileSource(fixtureSource(selectedFixtureId));
+                    }
                   }}
                 >
                   {mode.label}

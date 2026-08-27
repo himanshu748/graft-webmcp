@@ -8,6 +8,7 @@ import {
   isPrivateAddress,
   readCapped,
 } from "../api/_net";
+import { shouldCompileFixtureOnModeSelection } from "./data/sources";
 
 function streamResponse(chunks: string[], headers: Record<string, string> = {}): Response {
   const encoder = new TextEncoder();
@@ -19,6 +20,16 @@ function streamResponse(chunks: string[], headers: Record<string, string> = {}):
   });
   return new Response(stream, { headers });
 }
+
+describe("owned fixture mode", () => {
+  it("loads the selected fixture when switching from another source", () => {
+    expect(shouldCompileFixtureOnModeSelection("fixture", "live")).toBe(true);
+    expect(shouldCompileFixtureOnModeSelection("fixture", "paste")).toBe(true);
+    expect(shouldCompileFixtureOnModeSelection("fixture")).toBe(true);
+    expect(shouldCompileFixtureOnModeSelection("fixture", "fixture")).toBe(false);
+    expect(shouldCompileFixtureOnModeSelection("live", "fixture")).toBe(false);
+  });
+});
 
 describe("private address classification", () => {
   it("rejects every private and link-local range", () => {

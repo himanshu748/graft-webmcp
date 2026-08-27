@@ -2,6 +2,13 @@ import { fixtureDefinitions, type FixtureId } from "./fixtures";
 
 export type SourceKind = "fixture" | "live" | "paste";
 
+export function shouldCompileFixtureOnModeSelection(
+  nextMode: SourceKind,
+  activeKind?: SourceKind,
+): boolean {
+  return nextMode === "fixture" && activeKind !== "fixture";
+}
+
 export interface SourceMeta {
   bytes: number;
   strippedHeaders: string[];

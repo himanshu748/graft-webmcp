@@ -180,17 +180,17 @@ button:disabled {
 }
 
 .brand-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
+  display: block;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--border-strong);
-  border-radius: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: -0.06em;
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-copy {
@@ -1878,7 +1878,7 @@ button:disabled {
   }
 
   .connection-state {
-    max-width: 155px;
+    max-width: 180px;
     overflow: hidden;
   }
 
