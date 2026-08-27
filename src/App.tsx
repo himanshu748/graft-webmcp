@@ -232,11 +232,16 @@ function persistReviews(sourceKey: string, tools: GraftTool[]): void {
   );
 }
 
-function registrationLabel(report: ToolRegistrationReport): string {
+/**
+ * Derived tools and Graft's own controls register through separate paths, so
+ * counting only the registry undercounts what the browser actually sees.
+ */
+function registrationLabel(report: ToolRegistrationReport, controlCount: number): string {
   if (!report.available) return "WebMCP not detected";
   if (report.failures.length > 0) return "Registration issue";
-  if (report.registered.length === 0) return "WebMCP ready";
-  return `${report.registered.length} tools live`;
+  const total = report.registered.length + controlCount;
+  if (total === 0) return "WebMCP ready";
+  return `${total} tools live`;
 }
 
 function statusLabel(status: GraftTool["status"]): string {
@@ -1010,7 +1015,7 @@ export function App() {
           </nav>
           <div className="connection-state" data-connected={connected} aria-live="polite">
             <span className="connection-light" aria-hidden="true" />
-            <span>{registrationLabel(registration)}</span>
+            <span>{registrationLabel(registration, controlToolNames.length)}</span>
           </div>
         </div>
       </header>
