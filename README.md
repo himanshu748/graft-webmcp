@@ -29,7 +29,7 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 
 ## Verified native surface
 
-`node scripts/verify-native.mjs` drives the deployed site in a real Chrome and prints what actually happens. Recorded run, 2026-08-27:
+`CHROME_PATH=/path/to/chrome node scripts/verify-native.mjs [url]` drives the deployed site, or an optional URL, in a real Chrome and prints what actually happens. `CHROME_PATH` is optional when Chrome is installed in a standard system location. Recorded run, 2026-08-27:
 
 ```
 11 tools registered natively:

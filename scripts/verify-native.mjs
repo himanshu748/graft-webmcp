@@ -1,15 +1,45 @@
 // Verifies Graft's native WebMCP surface end to end in a real Chrome.
-//   node scripts/verify-native.mjs [url]
+//   CHROME_PATH=/path/to/chrome node scripts/verify-native.mjs [url]
 // Requires Chrome 149+ with WebMCP. Install one with:
 //   npx puppeteer browsers install chrome
+import { existsSync } from "node:fs";
+import { platform } from "node:os";
 import puppeteer from "puppeteer-core";
 
-const CHROME =
-  "/Users/himanshujha/.cache/puppeteer/chrome/mac_arm-152.0.7977.54/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
+const systemCandidates = {
+  darwin: [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+  ],
+  linux: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium"],
+  win32: [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  ],
+};
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+const chromePath = [
+  process.env.CHROME_PATH,
+  process.env.GOOGLE_CHROME_BIN,
+  ...(systemCandidates[platform()] ?? []),
+].find((candidate) => candidate && existsSync(candidate));
+
+if (!chromePath) {
+  console.error(
+    "Chrome 149+ was not found. Set CHROME_PATH to a Chrome or Chrome for Testing executable.",
+  );
+  process.exit(1);
+}
+
+const targetUrl = process.argv[2] ?? "https://graft-webmcp.vercel.app/";
+
+const browser = await puppeteer.launch({
+  executablePath: chromePath,
+  headless: true,
+  args: ["--no-sandbox"],
+});
 const page = await browser.newPage();
-await page.goto("https://graft-webmcp.vercel.app/", { waitUntil: "networkidle2", timeout: 60000 });
+await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 60000 });
 await new Promise((r) => setTimeout(r, 10000));
 
 async function call(name, args = {}) {
