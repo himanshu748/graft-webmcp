@@ -23,7 +23,7 @@ Do not claim arbitrary URL support, a global registry, third-party mutation, ori
 - Run `npm run build`.
 - Start the production build with `npm run preview` or use the deployed live URL.
 - Open a fresh Graft session. If a rehearsal review is still saved, remove only `graft:review:catalog` from local storage, then reload.
-- Confirm all three fixture cards load with no network or console errors.
+- Confirm the live compile finishes on load, the badge reports the full native tool count, and the six preset pages load with no console errors.
 - Confirm export downloads and opens as expected.
 
 ### Browser
@@ -33,7 +33,7 @@ Use the latest ChatGPT desktop in-app browser first. The official alternative is
 - Confirm the page reports the native WebMCP surface as available.
 - Confirm `document.modelContext` is used. Chrome 149 may use the compatibility fallback.
 - Confirm the expected Signal Cabinet tools are registered.
-- Call one read tool, cancel one local-cart call and then recompile the fixture.
+- Call one read tool, run `graft_verify_url` against the deployed owner site, then recompile a different URL.
 - Close unrelated tabs and hide personal bookmarks, notifications, account names and extensions.
 
 An origin trial token is optional and is not part of the demo dependency.

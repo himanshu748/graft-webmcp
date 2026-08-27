@@ -2,7 +2,14 @@
 
 ## 1. Scope and invariants
 
-Graft is a client-side React, TypeScript and Vite application. Its core compiler accepts a `Document`-shaped root without depending on a fixture ID, but the P0 product supplies only three owned static fixtures. Pasted HTML, uploaded snapshots, permissioned URL intake and live third-party pages are future inputs, not shipped claims.
+Graft is a React, TypeScript and Vite application with serverless intake and verification endpoints. Its core compiler accepts a `Document`-shaped root without depending on a fixture ID, and three intake paths feed it the same way: live URL, pasted markup and bundled fixture.
+
+Shipped since this document was first written, and authoritative in the README:
+
+- `api/fetch.ts` reads a public page server-side with host, robots and size guards, and renders JavaScript-built pages in a headless browser when the server returns a shell.
+- `api/verify.ts` opens a deployed site and reports the WebMCP surface it actually registers, including drift against an exported contract.
+- A control plane registers Graft's own operations as WebMCP tools under a `graft_` prefix.
+- `examples/owner-site` is a deployed integration proving exported contracts work off Graft's origin.
 
 The implementation must preserve five invariants:
 
@@ -42,7 +49,7 @@ There is no server, remote registry, target fetcher, credential bridge or third-
 
 | Responsibility | Contract |
 | --- | --- |
-| Fixture intake | Load one owned fixture by stable ID and produce a same-origin `Document`. |
+| Intake | Load a live URL, pasted markup or an owned fixture, and produce a sanitized, inert `Document`. |
 | Snapshot sanitizer | Remove active content and return sanitized DOM plus a report of removed features. |
 | Deriver | Detect supported semantic patterns and emit deterministic candidates. |
 | Confidence gate | Attach a score, reasons and `auto`, `held` or `rejected` status. |

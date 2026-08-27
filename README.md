@@ -12,7 +12,7 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 
 - **Live intake.** Any public HTML page. Authentication, banking, mail and government domains are refused by policy, private and link-local addresses are refused at every redirect hop, and `robots.txt` is honoured.
 - **Verify what you shipped, and detect drift.** `graft_verify_url` opens a deployed site in a headless browser, reads the tools it actually registers, and reports whether the contracts are well formed and uniquely named. Pass the tool names you exported and it reports drift: what is missing, what is new. This closes the loop from discover to review to ship to verify to maintain.
-- **Graft is agent-operable itself.** Alongside the tools it derives, Graft registers its own control surface: `graft_status`, `graft_compile_url`, `graft_list_candidates`, `graft_inspect_candidate`, `graft_set_candidate` and `graft_export_adapter`. An agent can ask Graft to compile a URL, read the scored evidence behind a candidate, publish a held one and export the reviewed contract, without touching the interface. The `graft_` prefix is load-bearing: compiling Graft's own page derives a `list_tool_candidates`, and two tools cannot share a name.
+- **Graft is agent-operable itself.** Alongside the tools it derives, Graft registers its own control surface: `graft_status`, `graft_compile_url`, `graft_list_candidates`, `graft_inspect_candidate`, `graft_set_candidate`, `graft_export_adapter` and `graft_verify_url`. An agent can ask Graft to compile a URL, read the scored evidence behind a candidate, publish a held one and export the reviewed contract, without touching the interface. The `graft_` prefix is load-bearing: compiling Graft's own page derives a `list_tool_candidates`, and two tools cannot share a name.
 - **Live search, not just snapshot filtering.** When a page's search form declares a GET endpoint, the derived tool replays the query against the live site and returns fresh results the snapshot never held. `search_this_site("asyncio")` on python.org returns 20 real results. The replay goes through the same intake endpoint, so it inherits every host check, the denylist, robots and the size caps.
 - **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
 - **Explainable confidence.** A name lifted from a class attribute is not an accessible name, and the difference is scored. Every tool shows the evidence behind its number.
@@ -61,9 +61,9 @@ add_to_demo_cart("palm-relay", 2)  → cart goes "Empty" → "2 x Palm Relay ($1
 `CHROME_PATH=/path/to/chrome node scripts/verify-native.mjs [url]` drives the deployed site, or an optional URL, in a real Chrome and prints what actually happens. `CHROME_PATH` is optional when Chrome is installed in a standard system location. Recorded run, 2026-08-27:
 
 ```
-11 tools registered natively:
+12 tools registered natively:
   graft_status, graft_compile_url, graft_list_candidates, graft_inspect_candidate,
-  graft_set_candidate, graft_export_adapter,
+  graft_set_candidate, graft_export_adapter, graft_verify_url,
   get_page_summary, get_page_outline, get_product, list_navigation, list_products
 
 graft_status              -> books.toscrape.com, 6 candidates (5 auto, 1 held), 5 registered
@@ -86,8 +86,9 @@ Two implementation notes worth knowing if you build against this API. Chrome tak
 4. Ask the agent: **"List the products on this page and tell me which one is cheapest."**
 5. Expand the successful call to see its arguments and returned data.
 6. Paste a URL of your own into the intake field and compile it.
-7. Switch to **Owned fixture** to see the same compiler run offline against bundled pages, including one confirmed local-only mutation.
-8. Export the reviewed contract.
+7. Open **https://graft-owner-example.vercel.app**. That is an ordinary site on an origin Graft does not serve, running an adapter Graft generated. Ask the agent to search it and add something to the cart, and watch the page change.
+8. Back in Graft, call `graft_verify_url` on that owner site. It reports 6 tools live, contracts well formed, and no drift against the exported contract.
+9. Export the reviewed contract, and switch to **Owned fixture** to see the same compiler run offline.
 
 The interface remains usable when native WebMCP is unavailable, but it reports that state clearly and does not claim tools were registered.
 

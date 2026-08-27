@@ -1,7 +1,7 @@
 import { assertPublicHost, IntakeError } from "./_net.js";
 import { readNativeTools } from "./_render.js";
 
-interface Check {
+export interface Check {
   id: string;
   label: string;
   pass: boolean;
@@ -10,7 +10,7 @@ interface Check {
   detail: string;
 }
 
-interface ToolFinding {
+export interface ToolFinding {
   name: string;
   issues: string[];
 }
@@ -22,7 +22,7 @@ const DESCRIPTION_LIMIT = 500;
  * Contract checks mirror the budgets Chrome's own WebMCP guidance publishes,
  * so a pass here means the same thing an agent client would conclude.
  */
-function inspectTool(
+export function inspectTool(
   tool: {
     name: string;
     description: string;
@@ -151,7 +151,7 @@ export default async function handler(req: any, res: any) {
     });
 
     // Drift: what the owner shipped against what Graft last reviewed.
-    let drift: { missing: string[]; added: string[] } | null = null;
+    let drift: { missing: string[]; added: string[]; exact: boolean } | null = null;
     if (expectedRaw) {
       const expected: string[] = expectedRaw
         .split(",")
@@ -159,17 +159,21 @@ export default async function handler(req: any, res: any) {
         .filter(Boolean);
       const missing = expected.filter((name: string) => !names.includes(name));
       const added = names.filter((name) => !expected.includes(name));
-      drift = { missing, added };
+      drift = { missing, added, exact: missing.length === 0 && added.length === 0 };
+      // A missing tool breaks something that was reviewed and shipped, so it
+      // fails. An extra tool is a fact about the site, not a defect: owners add
+      // tools Graft never proposed. It is reported, never silently folded into
+      // a claim that the surfaces match.
       checks.push({
         id: "no-drift",
-        label: "Shipped surface matches the reviewed contract",
+        label: "Every reviewed tool is still live",
         pass: missing.length === 0,
         detail:
-          missing.length === 0
-            ? added.length === 0
-              ? "Exactly the reviewed tools are live."
-              : `All reviewed tools are live. ${added.length} additional tool(s) present: ${added.join(", ")}`
-            : `Missing from the live site: ${missing.join(", ")}`,
+          missing.length > 0
+            ? `Missing from the live site: ${missing.join(", ")}. Something that was reviewed is no longer registered.`
+            : added.length === 0
+              ? "Exact match. The live surface is precisely the reviewed contract."
+              : `All ${expected.length} reviewed tool(s) are live. ${added.length} tool(s) present that were not in the reviewed contract: ${added.join(", ")}. Not a failure, but worth confirming they were intended.`,
       });
     }
 

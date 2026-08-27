@@ -209,6 +209,19 @@ export async function readNativeTools(target: URL): Promise<NativeToolReport | n
         await settle(500);
       }
 
+      // Chrome returns inputSchema and annotations as JSON strings. Treating a
+      // string as an object silently skips every structural check, so the
+      // verifier would report contracts as sound without ever reading one.
+      const parse = (value: unknown) => {
+        if (value == null) return null;
+        if (typeof value !== "string") return value;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return null;
+        }
+      };
+
       return {
         modelContextPresent: true,
         surface: doc?.modelContext ? ("document" as const) : ("navigator" as const),
@@ -221,8 +234,8 @@ export async function readNativeTools(target: URL): Promise<NativeToolReport | n
         tools: tools.map((tool) => ({
           name: String(tool.name ?? ""),
           description: String(tool.description ?? ""),
-          inputSchema: tool.inputSchema ?? null,
-          annotations: (tool.annotations as Record<string, unknown>) ?? null,
+          inputSchema: parse(tool.inputSchema),
+          annotations: parse(tool.annotations) as Record<string, unknown> | null,
         })),
         userAgent: String(nav?.userAgent ?? ""),
       };

@@ -9,7 +9,7 @@
 
 Graft is a governed DOM-to-WebMCP compiler for owned page snapshots. It compiles a safe static snapshot into explainable tool candidates, lets a human review the contracts, registers the approved tools in the current page and exports the reviewed result as a starting point for owner-shipped integration.
 
-The judged experience uses three original fixtures. Graft does not fetch or re-serve arbitrary third-party websites, run imported scripts, forward credentials or claim universal website compatibility.
+The judged experience compiles any public URL, pasted markup or one of three original fixtures. Graft reads a page once on the server and never re-serves it under its own origin, never runs the target's scripts in your tab, never forwards credentials and does not claim universal website compatibility. See the README for the shipped surface, which is the authority when this document and the code disagree.
 
 ## 2. Problem
 
@@ -27,7 +27,7 @@ Graft shortens the first pass. It makes the proposed contract visible, editable 
 
 ## 4. Core experience
 
-1. The user opens Graft and chooses one of three owned fixtures.
+1. The user opens Graft, which compiles a live page on load, and can point it at any public URL.
 2. Graft creates a sanitized, inert snapshot and displays its source and trust status.
 3. The compiler detects semantic patterns and proposes typed tools.
 4. High-confidence tools are eligible for registration. Ambiguous tools are held with reasons.

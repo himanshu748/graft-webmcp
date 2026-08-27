@@ -25,7 +25,7 @@ function ok(message, data) {
 }
 
 /** Search genuinely filters the page, so the human watching sees it happen. */
-function applyFilter(query, category) {
+function applyFilter(query, category, inStock) {
   const needle = (query ?? "").trim().toLowerCase();
   const wanted = (category ?? "").trim().toLowerCase();
   let shown = 0;
@@ -35,7 +35,8 @@ function applyFilter(query, category) {
     const haystack = `${product.title} ${product.description} ${product.category}`.toLowerCase();
     const hit =
       (!needle || haystack.includes(needle)) &&
-      (!wanted || wanted === "all" || product.category.toLowerCase() === wanted);
+      (!wanted || wanted === "all" || product.category.toLowerCase() === wanted) &&
+      (!inStock || /in stock/i.test(product.availability));
     article.hidden = !hit;
     if (hit) {
       shown += 1;
@@ -67,8 +68,11 @@ const handlers = {
       },
     ),
 
+  // Every parameter below is one the generated schema declares. A handler that
+  // reads a name the contract does not publish is a handler an agent can never
+  // reach.
   search_catalog: async (args) => {
-    const { shown, matches } = applyFilter(args?.query, args?.category);
+    const { shown, matches } = applyFilter(args?.query, args?.category, args?.in_stock === true);
     return ok(`${shown} of ${products().length} products match.`, { total: shown, results: matches });
   },
 
@@ -84,9 +88,9 @@ const handlers = {
   },
 
   get_product: async (args) => {
-    const wanted = String(args?.title ?? "").trim().toLowerCase();
-    const found = products().map(readProduct).find((product) => product.title.toLowerCase() === wanted);
-    if (!found) return ok(`No product titled "${args?.title}".`);
+    const wanted = String(args?.product_id ?? "").trim().toLowerCase();
+    const found = products().map(readProduct).find((product) => product.id.toLowerCase() === wanted);
+    if (!found) return ok(`No product with id "${args?.product_id}".`);
     return ok(`${found.title}, ${found.price}, ${found.availability}.`, found);
   },
 };
@@ -97,13 +101,11 @@ const handlers = {
 const heldWrite = graftManifest.tools.find((tool) => tool.name === "add_to_demo_cart");
 
 async function addToCart(args) {
-  const wanted = String(args?.product_id ?? args?.title ?? "").trim().toLowerCase();
+  const wanted = String(args?.product_id ?? "").trim().toLowerCase();
   const article = products().find(
-    (node) =>
-      node.getAttribute("data-product-id")?.toLowerCase() === wanted ||
-      readProduct(node).title.toLowerCase() === wanted,
+    (node) => node.getAttribute("data-product-id")?.toLowerCase() === wanted,
   );
-  if (!article) return ok(`No product matching "${wanted}".`);
+  if (!article) return ok(`No product with id "${args?.product_id}".`);
   const product = readProduct(article);
   const quantity = Math.max(1, Math.min(3, Number(args?.quantity ?? 1)));
   cartItems.push({ title: product.title, quantity });
@@ -125,21 +127,14 @@ async function boot() {
   const context = document.modelContext ?? navigator.modelContext;
 
   if (heldWrite && context) {
+    // The reviewed contract ships as written. Re-declaring it by hand is how a
+    // shipped tool quietly stops matching what was reviewed.
     await context.registerTool(
       {
         name: heldWrite.name,
-        description:
-          "Add a product to this site's cart. The owner reviewed and bound this handler; Graft held the candidate rather than registering it automatically.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            product_id: { type: "string", description: "Product id or exact title." },
-            quantity: { type: "integer", description: "How many, 1 to 3.", minimum: 1, maximum: 3 },
-          },
-          required: ["product_id"],
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false, untrustedContentHint: true },
+        description: heldWrite.description,
+        inputSchema: heldWrite.inputSchema,
+        annotations: heldWrite.annotations ?? { readOnlyHint: false, untrustedContentHint: true },
         execute: addToCart,
       },
       {},
@@ -161,7 +156,11 @@ async function boot() {
 document.querySelector("form.search-grid")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
-  applyFilter(String(data.get("query") ?? ""), String(data.get("category") ?? ""));
+  applyFilter(
+    String(data.get("query") ?? ""),
+    String(data.get("category") ?? ""),
+    data.get("in_stock") !== null,
+  );
 });
 
 boot().catch((error) => {
