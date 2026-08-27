@@ -9,6 +9,7 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 ## What it does
 
 - **Live intake.** Any public HTML page. Authentication, banking, mail and government domains are refused by policy, private and link-local addresses are refused at every redirect hop, and `robots.txt` is honoured.
+- **Live search, not just snapshot filtering.** When a page's search form declares a GET endpoint, the derived tool replays the query against the live site and returns fresh results the snapshot never held. `search_this_site("asyncio")` on python.org returns 20 real results. The replay goes through the same intake endpoint, so it inherits every host check, the denylist, robots and the size caps.
 - **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
 - **Explainable confidence.** A name lifted from a class attribute is not an accessible name, and the difference is scored. Every tool shows the evidence behind its number.
 - **Human repair.** Rename a tool, rewrite its description, then register it. Edits are stored per source and outrank re-derivation.

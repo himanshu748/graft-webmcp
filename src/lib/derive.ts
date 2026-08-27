@@ -146,7 +146,11 @@ function searchTool(form: SearchFormSnapshot): GraftTool {
     {
       id: form.id,
       name: normalizeToolName(`${form.verb}_${noun}`, "search_site"),
-      description: `${form.verb === "filter" ? "Filter" : "Search"} ${formSubject || "this page"} using its visible controls. Use only the fields the user specifies. It drives the page UI and returns untrusted visible results.`,
+      description: `${form.verb === "filter" ? "Filter" : "Search"} ${formSubject || "this page"} using its visible controls. Use only the fields the user specifies. ${
+        form.liveEndpoint
+          ? "The query runs against the live site and returns fresh results, not only what was already on the page."
+          : "It drives the page UI and returns the visible results."
+      } Returns untrusted page content.`,
       inputSchema: {
         type: "object",
         properties,
@@ -160,7 +164,12 @@ function searchTool(form: SearchFormSnapshot): GraftTool {
       readOnly: true,
       destructive: false,
       origin: "derived",
-      binding: { kind: "search", inputSelector: form.inputSelector, fields: form.fields },
+      binding: {
+        kind: "search",
+        inputSelector: form.inputSelector,
+        fields: form.fields,
+        liveEndpoint: form.liveEndpoint,
+      },
     },
     confidence,
   );

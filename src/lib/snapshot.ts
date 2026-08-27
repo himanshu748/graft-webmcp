@@ -354,6 +354,7 @@ function searchFields(form: HTMLFormElement): SearchFormFieldSnapshot[] {
     const inputType = isSelect ? "select" : (control as HTMLInputElement).type;
     const field: SearchFormFieldSnapshot = {
       key,
+      name: control.getAttribute("name") || rawKey,
       label: getAccessibleName(control) || key.replace(/_/g, " "),
       selector: createSelector(control).selector,
       control:
@@ -399,6 +400,7 @@ function snapshotSearchForms(root: ParentNode): SearchFormSnapshot[] {
       selectorStable: selectorInfo.stable && inputSelectorInfo.stable,
       verb: searchVerb(form),
       fields: searchFields(form),
+      liveEndpoint: form.getAttribute("data-graft-action"),
     });
   }
   return forms.slice(0, 6);

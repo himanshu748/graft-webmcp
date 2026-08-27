@@ -79,10 +79,13 @@ export interface SearchFormSnapshot {
   selectorStable: boolean;
   verb: "search" | "filter";
   fields: SearchFormFieldSnapshot[];
+  liveEndpoint: string | null;
 }
 
 export interface SearchFormFieldSnapshot {
   key: string;
+  /** The control's real name attribute, needed to rebuild the query string. */
+  name: string;
   label: string;
   selector: string;
   control: "text" | "number" | "select" | "checkbox";
@@ -135,7 +138,12 @@ export type ToolBinding =
       columns: TableColumnSnapshot[];
     }
   | { kind: "table_item"; columns: TableColumnSnapshot[]; keyField: string }
-  | { kind: "search"; inputSelector: string; fields: SearchFormFieldSnapshot[] }
+  | {
+      kind: "search";
+      inputSelector: string;
+      fields: SearchFormFieldSnapshot[];
+      liveEndpoint: string | null;
+    }
   | { kind: "action_candidate"; controlSelector: string; targets: string[] }
   | {
       kind: "local_cart";
@@ -185,6 +193,18 @@ export interface ToolExecutionResult {
   ok: boolean;
   message: string;
   data?: Record<string, JsonValue>;
+}
+
+export interface LiveSearchRequest {
+  endpoint: string;
+  params: Record<string, string>;
+  toolName: string;
+}
+
+export interface LiveSearchResponse {
+  url: string;
+  rows: string[];
+  total: number;
 }
 
 export interface ToolExecutionContext {

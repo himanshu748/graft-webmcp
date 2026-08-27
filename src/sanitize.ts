@@ -52,8 +52,25 @@ function isSafeFragment(value: string): boolean {
   return /^#[A-Za-z][\w:.-]*$/.test(value.trim());
 }
 
-export function sanitizeFixtureHtml(html: string): SanitizedFixture {
+export function sanitizeFixtureHtml(html: string, baseUrl?: string): SanitizedFixture {
   const documentNode = new DOMParser().parseFromString(html, "text/html");
+  // Read the form targets before the network attributes are stripped. They are
+  // kept as inert data so a GET search can be replayed against the live site.
+  const formTargets = new Map<Element, { action: string; method: string }>();
+  for (const form of documentNode.querySelectorAll("form")) {
+    const rawAction = form.getAttribute("action");
+    const method = (form.getAttribute("method") || "get").toLowerCase();
+    if (method !== "get") continue;
+    if (!baseUrl) continue;
+    try {
+      const resolved = new URL(rawAction ?? "", baseUrl);
+      if (resolved.protocol === "https:" || resolved.protocol === "http:") {
+        formTargets.set(form, { action: resolved.href, method });
+      }
+    } catch {
+      // An unresolvable action simply means no live replay for that form.
+    }
+  }
   const activeNodes = [...documentNode.querySelectorAll(ACTIVE_NODE_SELECTOR)];
   activeNodes.forEach((node) => node.remove());
 
@@ -93,9 +110,14 @@ export function sanitizeFixtureHtml(html: string): SanitizedFixture {
   });
 
   documentNode.querySelectorAll("form").forEach((form) => {
+    const target = formTargets.get(form);
     form.removeAttribute("action");
     form.removeAttribute("method");
     form.setAttribute("data-graft-inert", "true");
+    if (target) {
+      form.setAttribute("data-graft-action", target.action);
+      form.setAttribute("data-graft-method", target.method);
+    }
   });
 
   const csp = documentNode.createElement("meta");

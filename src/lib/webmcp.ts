@@ -30,6 +30,7 @@ export interface WebMCPRegistryOptions {
   settleQuietMs?: number;
   settleTimeoutMs?: number;
   confirm?: (request: ToolConfirmationRequest) => boolean | Promise<boolean>;
+  runLiveSearch?: ExecuteToolOptions["runLiveSearch"];
   onEvent?: (event: GraftLifecycleEvent) => void;
 }
 
@@ -278,6 +279,7 @@ export class WebMCPRegistry {
             settleQuietMs: this.options.settleQuietMs,
             settleTimeoutMs: this.options.settleTimeoutMs,
             confirm: this.options.confirm,
+            runLiveSearch: this.options.runLiveSearch,
           };
           result = await executeTool(tool, args, executeOptions);
           if (!result.ok) status = /cancel|confirm|blocked/i.test(result.message) ? "cancelled" : "error";

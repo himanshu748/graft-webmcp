@@ -29,7 +29,9 @@ The human stays in the loop where it matters and gets out of the way where it do
 
 ### What people and agents can do together that was not possible before
 
-Point an agent at a site that has never heard of WebMCP and have it work from a real contract instead of a guess.
+Point an agent at a site that has never heard of WebMCP and have it operate that site from a real contract instead of a guess.
+
+Search is the clearest case. When a page's search form declares a GET endpoint, Graft derives a typed `search` tool that replays the query against the live site. Ask for `search_this_site("asyncio")` on python.org and the agent gets 20 current results, not a filter over the twenty rows that happened to be on the page. The site published no API, changed nothing and knows nothing about Graft.
 
 On `books.toscrape.com`, Graft derives six contracts: five that register, including `list_products`, `get_product` and `list_navigation`, plus an `add_to_basket` write candidate that is held for review rather than registered. On `python.org` it derives ten tools including `search_this_site`, `list_latest_news` and `list_upcoming_events` with matching detail tools. Neither site knows Graft exists.
 
@@ -62,7 +64,7 @@ Open `books.toscrape.com` directly. Ask the agent to find the cheapest in-stock 
 Open Graft. It has already compiled that same site: five registered tools and one held candidate. Open `list_products` and show the schema, the annotations, and the confidence reasons. Ask the agent the same question, word for word. It calls the tool and answers. Expand the call to show exact arguments and returned rows.
 
 **1:05 to 1:35. Generality.**
-Paste `https://www.python.org` into the field. Ten tools appear, including `search_this_site` and `list_upcoming_events`. This is the beat that proves it is a compiler and not three hardcoded demos.
+Paste `https://www.python.org` into the field. Ten tools appear. Ask the agent to search the site for asyncio. The call goes out to `python.org/search/?q=asyncio` and comes back with 20 live results. This is the beat that proves the agent is operating the site, not reading a copy of it.
 
 **1:35 to 2:10. Governance.**
 Show `add_to_basket` held at 55, and read its reason: a write contract with no bound handler is never registered automatically. Then paste a site that refuses, and show the failure card naming the cause.

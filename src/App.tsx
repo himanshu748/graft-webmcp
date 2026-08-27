@@ -47,6 +47,7 @@ import {
   serializeSanitizedDocument,
 } from "./sanitize";
 import { buildAdapterModule } from "./export-adapter";
+import { runLiveSearch } from "./liveSearch";
 
 type CompilePhase = "ready" | "compiling" | "complete" | "error";
 type IntakeMode = "live" | "paste" | "fixture";
@@ -512,7 +513,7 @@ export function App() {
     try {
       await WAIT(100);
       if (compileTokenRef.current !== token) return;
-      const sanitized = sanitizeFixtureHtml(source.html);
+      const sanitized = sanitizeFixtureHtml(source.html, source.kind === "live" ? source.sourceUrl : undefined);
       const sourceDocument = sanitized.document;
       setCompileStage(1);
 
@@ -579,6 +580,7 @@ export function App() {
         root: sourceDocument,
         maxOutputChars: DEMO_OUTPUT_BUDGET,
         confirm: requestConfirmation,
+        runLiveSearch: source.kind === "live" ? runLiveSearch : undefined,
         onEvent: handleLifecycleEvent,
       });
       registryRef.current = registry;
@@ -792,6 +794,7 @@ export function App() {
         root: sourceDocument,
         maxOutputChars: DEMO_OUTPUT_BUDGET,
         confirm: requestConfirmation,
+        runLiveSearch,
       });
       const duration = Math.max(0, Math.round(performance.now() - started));
       addTimelineEntry({
@@ -1042,9 +1045,9 @@ export function App() {
             {intakeMode === "live" ? (
               <>
                 <p className="intake-help" id="intake-help">
-                  Any public page works. If the server returns a shell, Graft renders the
-                  page in a headless browser and compiles that instead, and tells you when
-                  even rendering finds nothing. Authentication, banking, mail and government
+                  Any public page works. Derived search tools query the live site rather
+                  than filtering the snapshot. If the server returns a shell, Graft renders
+                  the page in a headless browser and compiles that instead. Authentication, banking, mail and government
                   domains are refused, and robots.txt is honoured.
                 </p>
                 <ul className="preset-rack" aria-label="Verified example pages">

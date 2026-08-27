@@ -11,6 +11,8 @@ import {
 import { deriveSnapshot, snapshotElementRow } from "./snapshot";
 import { validateToolArguments } from "./validation";
 import type {
+  LiveSearchRequest,
+  LiveSearchResponse,
   GraftTool,
   JsonValue,
   SnapshotRow,
@@ -25,6 +27,7 @@ export interface ToolConfirmationRequest {
 }
 
 export interface ExecuteToolOptions {
+  runLiveSearch?: (request: LiveSearchRequest) => Promise<LiveSearchResponse>;
   root?: ParentNode;
   signal?: AbortSignal;
   maxOutputChars?: number;
@@ -133,6 +136,27 @@ function compactJsonRecord(value: Record<string, JsonValue>): Record<string, Jso
       .slice(0, 24)
       .map(([key, item]) => [key, compactJsonValue(item)]),
   );
+}
+
+/**
+ * Live results still owe the agent an honest, bounded payload, and a truncated
+ * list must say it was truncated so the agent paginates instead of assuming it
+ * saw everything.
+ */
+function liveRowsWithinBudget(rows: string[], maxChars: number): string[] {
+  const budget = Math.max(200, maxChars - 200);
+  const kept: string[] = [];
+  let used = 0;
+  for (const row of rows) {
+    const text = truncateToolOutput(row, 300);
+    if (used + text.length > budget) break;
+    kept.push(text);
+    used += text.length;
+  }
+  if (kept.length < rows.length) {
+    kept.push(`...truncated, ${rows.length - kept.length} more results not shown.`);
+  }
+  return kept;
 }
 
 export function truncateToolOutput(text: string, maxChars = DEFAULT_MAX_OUTPUT): string {
@@ -624,6 +648,50 @@ async function searchResult(
     throw new Error(`Tool “${tool.name}” no longer resolves to its search form.`);
   }
   const form = target as HTMLFormElement;
+
+  // A snapshot can only filter the rows it captured. When the form declares a
+  // GET endpoint and a runner is available, the query goes to the live site so
+  // the agent sees results the snapshot never held.
+  if (tool.binding.liveEndpoint && options.runLiveSearch) {
+    const params: Record<string, string> = {};
+    for (const field of tool.binding.fields) {
+      const raw = args[field.key];
+      if (raw === undefined || raw === null || raw === "") continue;
+      params[field.name] = String(raw);
+    }
+    if (Object.keys(params).length > 0) {
+      try {
+        const live = await options.runLiveSearch({
+          endpoint: tool.binding.liveEndpoint,
+          params,
+          toolName: tool.name,
+        });
+        throwIfAborted(options.signal);
+        if (live.rows.length > 0) {
+          return {
+            ok: true,
+            message: `${live.total} result${live.total === 1 ? "" : "s"} from the live page.`,
+            data: {
+              source: "live",
+              url: live.url,
+              total: live.total,
+              results: liveRowsWithinBudget(live.rows, maxChars),
+            },
+          };
+        }
+        return {
+          ok: true,
+          message: "The live page returned no matching results.",
+          data: { source: "live", url: live.url, total: 0, results: [] },
+        };
+      } catch (error) {
+        // Falling back to the snapshot is better than failing the call, but the
+        // agent is told which one it got.
+        void error;
+      }
+    }
+  }
+
   const applied: Record<string, string | number | boolean> = {};
   for (const field of tool.binding.fields) {
     const rawValue = args[field.key];
