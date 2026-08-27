@@ -100,26 +100,41 @@ const handlers = {
 // the whole point of the review gate: Graft proposes, a human ships.
 const heldWrite = graftManifest.tools.find((tool) => tool.name === "add_to_demo_cart");
 
-async function addToCart(args) {
-  const wanted = String(args?.product_id ?? "").trim().toLowerCase();
+/**
+ * One action, two entry points. The person clicking the button and the agent
+ * calling the tool run exactly this, so neither can work while the other
+ * quietly does not.
+ */
+function addProductToCart(productId, quantity) {
+  const wanted = String(productId ?? "").trim().toLowerCase();
   const article = products().find(
     (node) => node.getAttribute("data-product-id")?.toLowerCase() === wanted,
   );
-  if (!article) return ok(`No product with id "${args?.product_id}".`);
+  if (!article) return { ok: false, message: `No product with id "${productId}".` };
+
   const product = readProduct(article);
-  const quantity = Math.max(1, Math.min(3, Number(args?.quantity ?? 1)));
-  cartItems.push({ title: product.title, quantity });
+  const count = Math.max(1, Math.min(3, Number(quantity) || 1));
+  cartItems.push({ title: product.title, quantity: count });
 
   document.getElementById("owner-cart-empty")?.remove();
   const li = document.createElement("li");
-  li.textContent = `${quantity} x ${product.title} (${product.price})`;
+  li.textContent = `${count} x ${product.title} (${product.price})`;
   document.getElementById("owner-cart-items").append(li);
+
+  const status = document.querySelector("output.cart-status");
+  if (status) {
+    const total = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+    status.textContent = `${total} item${total === 1 ? "" : "s"} in the cart. Last added: ${count} x ${product.title}.`;
+  }
   article.scrollIntoView({ block: "center" });
 
-  return ok(`Added ${quantity} x ${product.title} to the cart.`, {
-    cart: cartItems,
-    itemCount: cartItems.length,
-  });
+  return { ok: true, message: `Added ${count} x ${product.title} to the cart.`, product, count };
+}
+
+async function addToCart(args) {
+  const result = addProductToCart(args?.product_id, args?.quantity);
+  if (!result.ok) return ok(result.message);
+  return ok(result.message, { cart: cartItems, itemCount: cartItems.length });
 }
 
 async function boot() {
@@ -152,7 +167,17 @@ async function boot() {
   }
 }
 
-// The search form is the owner's, so it stays usable for humans too.
+// Both forms belong to the owner, so they stay usable by people.
+document.querySelector("form.cart-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const result = addProductToCart(data.get("product_id"), data.get("quantity"));
+  if (!result.ok) {
+    const status = document.querySelector("output.cart-status");
+    if (status) status.textContent = "Choose a device first.";
+  }
+});
+
 document.querySelector("form.search-grid")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
