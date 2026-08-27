@@ -726,6 +726,36 @@ export function App() {
           return controlStateRef.current;
         },
         exportAdapter: () => controlActionsRef.current?.exportAdapter() ?? null,
+        verifyUrl: async (url: string, expect: string[]) => {
+          const query = new URLSearchParams({ url });
+          if (expect.length > 0) query.set("expect", expect.join(","));
+          const response = await fetch(`/api/verify?${query.toString()}`);
+          const payload = await response.json();
+          if (!payload?.ok) {
+            return `Could not verify ${url}: ${payload?.message ?? "unknown error"}`;
+          }
+          const lines = [
+            `${payload.url}`,
+            `Verdict: ${payload.verdict} (${payload.passed}/${payload.total} decisive checks, ${payload.skipped} inconclusive)`,
+            `Tools registered: ${payload.tools.length}${payload.tools.length ? ` (${payload.tools.join(", ")})` : ""}`,
+            ...payload.checks.map(
+              (check: { pass: boolean; inconclusive?: boolean; label: string; detail: string }) =>
+                `${check.inconclusive ? "SKIP" : check.pass ? "PASS" : "FAIL"} ${check.label}: ${check.detail}`,
+            ),
+          ];
+          if (payload.drift) {
+            if (payload.drift.missing.length > 0) {
+              lines.push(`Drift: missing ${payload.drift.missing.join(", ")}`);
+            }
+            if (payload.drift.added.length > 0) {
+              lines.push(`Drift: added ${payload.drift.added.join(", ")}`);
+            }
+          }
+          for (const finding of payload.findings ?? []) {
+            lines.push(`Issue in ${finding.name}: ${finding.issues.join("; ")}`);
+          }
+          return lines.join("\n");
+        },
       },
       context,
       controller.signal,

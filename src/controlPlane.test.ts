@@ -51,6 +51,7 @@ function handlers(overrides: Partial<Parameters<typeof registerControlPlane>[0]>
     compileUrl: vi.fn(async () => snapshot),
     setCandidateStatus: vi.fn(async () => snapshot),
     exportAdapter: vi.fn(() => ({ fileName: "graft.js", toolCount: 2, eligible: 1 })),
+    verifyUrl: vi.fn(async () => "Verdict: pass (4/4 decisive checks, 0 inconclusive)"),
     ...overrides,
   } as Parameters<typeof registerControlPlane>[0];
 }
@@ -71,6 +72,7 @@ describe("control plane registration", () => {
       "graft_inspect_candidate",
       "graft_set_candidate",
       "graft_export_adapter",
+      "graft_verify_url",
     ]);
   });
 
@@ -89,6 +91,21 @@ describe("control plane registration", () => {
     expect(descriptors.get("graft_inspect_candidate").annotations.readOnlyHint).toBe(true);
     expect(descriptors.get("graft_set_candidate").annotations?.readOnlyHint).toBeUndefined();
     expect(descriptors.get("graft_compile_url").annotations?.readOnlyHint).toBeUndefined();
+    expect(descriptors.get("graft_verify_url").annotations.readOnlyHint).toBe(true);
+  });
+
+  it("passes an expect list through to the verifier as names", async () => {
+    const verifyUrl = vi.fn(async () => "ok");
+    const { descriptors } = await setup({ verifyUrl });
+    await descriptors.get("graft_verify_url").execute({
+      url: "https://shop.example.com",
+      expect: "list_products, get_product ,",
+    });
+    // Whitespace and a trailing separator must not become phantom tool names.
+    expect(verifyUrl).toHaveBeenCalledWith("https://shop.example.com", [
+      "list_products",
+      "get_product",
+    ]);
   });
 });
 

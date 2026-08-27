@@ -11,6 +11,7 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 ## What it does
 
 - **Live intake.** Any public HTML page. Authentication, banking, mail and government domains are refused by policy, private and link-local addresses are refused at every redirect hop, and `robots.txt` is honoured.
+- **Verify what you shipped, and detect drift.** `graft_verify_url` opens a deployed site in a headless browser, reads the tools it actually registers, and reports whether the contracts are well formed and uniquely named. Pass the tool names you exported and it reports drift: what is missing, what is new. This closes the loop from discover to review to ship to verify to maintain.
 - **Graft is agent-operable itself.** Alongside the tools it derives, Graft registers its own control surface: `graft_status`, `graft_compile_url`, `graft_list_candidates`, `graft_inspect_candidate`, `graft_set_candidate` and `graft_export_adapter`. An agent can ask Graft to compile a URL, read the scored evidence behind a candidate, publish a held one and export the reviewed contract, without touching the interface. The `graft_` prefix is load-bearing: compiling Graft's own page derives a `list_tool_candidates`, and two tools cannot share a name.
 - **Live search, not just snapshot filtering.** When a page's search form declares a GET endpoint, the derived tool replays the query against the live site and returns fresh results the snapshot never held. `search_this_site("asyncio")` on python.org returns 20 real results. The replay goes through the same intake endpoint, so it inherits every host check, the denylist, robots and the size caps.
 - **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
@@ -44,6 +45,8 @@ search_this_site(q=asyncio)   -> 20 results from python.org/search/?q=asyncio
 list_latest_news(limit=3) -> 3 of 5 rows, with pagination guidance
 graft_export_adapter      -> graft-https-www-python-org-.js, 10 of 10 eligible
 ```
+
+The verifier reports what it can prove and nothing more. A check the browser cannot answer is marked inconclusive rather than failed, and a schema that a listing does not expose is never asserted to be missing. Chrome 149 lists tools without some fields that Chrome 152 exposes, so the same site can be fully checkable in one build and only partly checkable in another. Saying so is the difference between a verifier and a guess.
 
 Two implementation notes worth knowing if you build against this API. Chrome takes the arguments to `executeTool` as a JSON string and returns the result as one, and the object form throws rather than coercing. The `execute` callback you register, however, receives a parsed object.
 

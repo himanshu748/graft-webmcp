@@ -18,6 +18,7 @@ export const CONTROL_TOOLS: Array<{ name: string; summary: string }> = [
   { name: "graft_inspect_candidate", summary: "Schema, annotations and scored evidence" },
   { name: "graft_set_candidate", summary: "Publish a held candidate, or hold a live one" },
   { name: "graft_export_adapter", summary: "Download the reviewed contract" },
+  { name: "graft_verify_url", summary: "Check a deployed site's own WebMCP surface" },
 ];
 
 export interface ControlPlaneHandlers {
@@ -25,6 +26,7 @@ export interface ControlPlaneHandlers {
   compileUrl(url: string): Promise<ControlPlaneSnapshot>;
   setCandidateStatus(name: string, status: "published" | "held"): Promise<ControlPlaneSnapshot>;
   exportAdapter(): { fileName: string; toolCount: number; eligible: number } | null;
+  verifyUrl(url: string, expect: string[]): Promise<string>;
 }
 
 function text(value: string) {
@@ -223,6 +225,38 @@ export async function registerControlPlane(
       return text(
         `Exported ${result.fileName}. ${result.eligible} of ${result.toolCount} candidates are eligible to register; the rest are held or rejected and are included as reviewed metadata only.`,
       );
+    },
+  });
+
+  await register({
+    name: "graft_verify_url",
+    description:
+      "Verify a deployed site's own WebMCP surface. Graft opens the page in a headless browser, reads the tools it registers, and reports whether the contracts are well formed and uniquely named. Pass expect as a comma-separated list of tool names to also check for drift against a contract you shipped earlier.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Absolute URL of the deployed page to verify." },
+        expect: {
+          type: "string",
+          description: "Optional comma-separated tool names that should be live.",
+        },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    async execute(args: { url?: string; expect?: string }) {
+      const url = String(args?.url ?? "").trim();
+      if (!url) return text("Provide a url.");
+      const expect = String(args?.expect ?? "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      try {
+        return text(await handlers.verifyUrl(url, expect));
+      } catch (error) {
+        return text(`Verify failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      }
     },
   });
 

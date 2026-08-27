@@ -6,6 +6,9 @@
   "functions": {
     "api/fetch.ts": {
       "maxDuration": 60
+    },
+    "api/verify.ts": {
+      "maxDuration": 60
     }
   }
 }
