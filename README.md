@@ -2,7 +2,9 @@
 
 **A governed tool layer for websites that never shipped one.**
 
-Paste any public URL. Graft reads that page once on the server, strips every script, frame and network attribute, then compiles what is left into typed WebMCP tool candidates. Each candidate carries a confidence score with its reasons, so you can see why a contract is trustworthy before you register it. Ambiguous tools are held for review instead of being registered silently.
+Graft gives site owners and agents an inspectable migration path from semantic HTML to reviewed WebMCP contracts.
+
+Paste any public URL. Graft reads that page once on the server, strips every script, frame and network attribute, then compiles what is left into typed WebMCP tool candidates. Each candidate carries a confidence score with its reasons, so you can see why a contract is trustworthy before you register it. Ambiguous tools are held for review instead of being registered silently, and the reviewed result exports as an adapter the owner can bind handlers to.
 
 **Live:** https://graft-webmcp.vercel.app
 
@@ -24,6 +26,26 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 - Snapshot-derived output can be registered with `untrustedContentHint` and safe tools with `readOnlyHint`.
 - A reviewed tool can execute through the browser's WebMCP surface with exact arguments and results visible in a local timeline.
 - Generated contracts are most useful as an owner-reviewed migration artifact, not as unexamined production code.
+
+## Verified native surface
+
+`node scripts/verify-native.mjs` drives the deployed site in a real Chrome and prints what actually happens. Recorded run, 2026-08-27:
+
+```
+11 tools registered natively:
+  graft_status, graft_compile_url, graft_list_candidates, graft_inspect_candidate,
+  graft_set_candidate, graft_export_adapter,
+  get_page_summary, get_page_outline, get_product, list_navigation, list_products
+
+graft_status              -> books.toscrape.com, 6 candidates (5 auto, 1 held), 5 registered
+graft_compile_url(python.org) -> 10 candidates, 10 registered
+graft_inspect_candidate   -> schema, annotations and the four scored reasons
+search_this_site(q=asyncio)   -> 20 results from python.org/search/?q=asyncio
+list_latest_news(limit=3) -> 3 of 5 rows, with pagination guidance
+graft_export_adapter      -> graft-https-www-python-org-.js, 10 of 10 eligible
+```
+
+Two implementation notes worth knowing if you build against this API. Chrome takes the arguments to `executeTool` as a JSON string and returns the result as one, and the object form throws rather than coercing. The `execute` callback you register, however, receives a parsed object.
 
 ## Judge path, under 60 seconds
 

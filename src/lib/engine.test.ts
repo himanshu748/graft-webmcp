@@ -304,7 +304,12 @@ describe("WebMCP registry", () => {
     expect(firstSignal?.aborted).toBe(true);
     const descriptor = context.descriptors.get("list_products");
     const execution = await descriptor?.execute({ offset: 0, limit: 1 });
-    expect(execution?.ok).toBe(true);
+    // The agent receives spec-shaped content blocks, with the structured
+    // payload alongside rather than instead of them.
+    expect(execution?.isError).toBeUndefined();
+    expect(execution?.content?.[0]?.type).toBe("text");
+    expect(execution?.content?.[0]?.text).toMatch(/list_products/);
+    expect(execution?.structuredContent?.rows).toBeDefined();
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

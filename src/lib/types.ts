@@ -195,6 +195,13 @@ export interface ToolExecutionResult {
   data?: Record<string, JsonValue>;
 }
 
+/** The shape the WebMCP execute contract returns to the agent. */
+export interface ToolContentResult {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent?: Record<string, JsonValue>;
+  isError?: true;
+}
+
 export interface LiveSearchRequest {
   endpoint: string;
   params: Record<string, string>;
@@ -224,7 +231,7 @@ export interface ModelContextToolDescriptor {
   execute: (
     args: Record<string, unknown>,
     context?: ToolExecutionContext,
-  ) => Promise<ToolExecutionResult>;
+  ) => Promise<ToolContentResult>;
 }
 
 export interface ModelContextLike extends EventTarget {

@@ -49,6 +49,7 @@ import {
 import { buildAdapterModule } from "./export-adapter";
 import { runLiveSearch } from "./liveSearch";
 import {
+  CONTROL_TOOLS,
   registerControlPlane,
   type ControlPlaneSnapshot,
 } from "./controlPlane";
@@ -418,6 +419,7 @@ export function App() {
     removedAttributes: 0,
     neutralizedCssReferences: 0,
   });
+  const [controlToolNames, setControlToolNames] = useState<string[]>([]);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [draftToolName, setDraftToolName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -689,6 +691,13 @@ export function App() {
     void boot();
   }, [compileSource, selectedFixtureId]);
 
+  const settleControlState = useCallback(async () => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await WAIT(100);
+      if (controlStateRef.current.phase !== "compiling") return;
+    }
+  }, []);
+
   // Graft compiles other sites into tools. This exposes Graft's own controls,
   // so an agent can drive the product rather than only the page it compiled.
   useEffect(() => {
@@ -700,18 +709,26 @@ export function App() {
         read: () => controlStateRef.current,
         compileUrl: async (url: string) => {
           await controlActionsRef.current?.compile(url);
+          // The compile resolves before React has re-rendered and registration
+          // has settled, so reporting immediately would hand the agent stale
+          // counts and a phase of "compiling".
+          await settleControlState();
           return controlStateRef.current;
         },
         setCandidateStatus: async (name, status) => {
           await controlActionsRef.current?.setStatus(name, status);
+          await settleControlState();
           return controlStateRef.current;
         },
         exportAdapter: () => controlActionsRef.current?.exportAdapter() ?? null,
       },
       context,
       controller.signal,
-    );
-    return () => controller.abort();
+    ).then(setControlToolNames);
+    return () => {
+      controller.abort();
+      setControlToolNames([]);
+    };
   }, []);
 
   useEffect(() => {
@@ -1457,6 +1474,29 @@ export function App() {
                 <span className="panel-meta">
                   {eligibleCount} ready / {heldCount} held
                 </span>
+              </div>
+
+              <div className="control-plane">
+                <div className="control-plane-head">
+                  <span className="panel-kicker">Graft's own tools</span>
+                  <span className="panel-meta">
+                    {controlToolNames.length > 0
+                      ? `${controlToolNames.length} registered`
+                      : "needs WebMCP"}
+                  </span>
+                </div>
+                <p className="control-plane-note">
+                  These drive Graft itself, so an agent can compile a URL, read the evidence
+                  behind a candidate and publish a held one without touching this interface.
+                </p>
+                <ul className="control-plane-list">
+                  {CONTROL_TOOLS.map((control) => (
+                    <li key={control.name} data-registered={controlToolNames.includes(control.name)}>
+                      <code>{control.name}</code>
+                      <span>{control.summary}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <div className="tool-workspace">

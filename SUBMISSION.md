@@ -15,7 +15,9 @@ Repo: https://github.com/himanshu748/graft-webmcp
 
 WebMCP has a supply problem, not a demand problem. The clients arrived: Chrome ships the origin trial, Edge has it behind a flag, and the ChatGPT desktop in-app browser speaks it. The supply did not. The WebMCP Directory at webmcp.com, the closest thing to a public census, listed 306 sites when this was built. Every other site on the web exposes nothing.
 
-Every tool that exists today sits on the same side of the fence. It helps a site owner add tools to code they own. Graft removes the owner from the loop: paste any public URL and the page becomes a set of typed, reviewable WebMCP contracts without asking the site for anything.
+Every tool that exists today starts from the same place: a site owner hand-writing tools in code they own, from a blank file. Graft gives site owners and agents an inspectable migration path from semantic HTML to reviewed WebMCP contracts. Paste any public URL and the page becomes typed candidates with the evidence behind each score, ready to review, run and export.
+
+The page you compile does not have to be yours, which is what makes the path usable before anyone has agreed to walk it.
 
 That is the exact gap the standard is stuck in, and it is a problem you can watch someone have in ten seconds.
 

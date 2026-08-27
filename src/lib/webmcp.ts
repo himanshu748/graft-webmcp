@@ -12,6 +12,7 @@ import type {
   ModelContextLike,
   ModelContextToolDescriptor,
   ToolExecutionContext,
+  ToolContentResult,
   ToolExecutionResult,
   ToolRegistrationReport,
 } from "./types";
@@ -258,7 +259,7 @@ export class WebMCPRegistry {
       execute: async (
         args: Record<string, unknown>,
         context?: ToolExecutionContext,
-      ): Promise<ToolExecutionResult> => {
+      ): Promise<ToolContentResult> => {
         this.activeExecutions += 1;
         const eventArgs = serializableArgs(args);
         const startedAt = Date.now();
@@ -301,7 +302,14 @@ export class WebMCPRegistry {
           status,
           durationMs: Math.max(0, Date.now() - startedAt),
         });
-        return result;
+        // The spec's execute contract returns content blocks. Returning the raw
+        // internal result would hand the agent a shape it has no reason to
+        // understand, so the structured payload rides alongside the text.
+        return {
+          content: [{ type: "text", text: result.message }],
+          ...(result.data ? { structuredContent: result.data } : {}),
+          ...(result.ok ? {} : { isError: true }),
+        };
       },
     };
   }

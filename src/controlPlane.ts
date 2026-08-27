@@ -11,6 +11,15 @@ export interface ControlPlaneSnapshot {
   webmcpAvailable: boolean;
 }
 
+export const CONTROL_TOOLS: Array<{ name: string; summary: string }> = [
+  { name: "graft_status", summary: "What is compiled, and how many candidates at each status" },
+  { name: "graft_compile_url", summary: "Compile any public URL into candidates" },
+  { name: "graft_list_candidates", summary: "List candidates, filterable by status" },
+  { name: "graft_inspect_candidate", summary: "Schema, annotations and scored evidence" },
+  { name: "graft_set_candidate", summary: "Publish a held candidate, or hold a live one" },
+  { name: "graft_export_adapter", summary: "Download the reviewed contract" },
+];
+
 export interface ControlPlaneHandlers {
   read(): ControlPlaneSnapshot;
   compileUrl(url: string): Promise<ControlPlaneSnapshot>;
@@ -83,7 +92,7 @@ export async function registerControlPlane(
     description:
       "Report what Graft currently has compiled: the source page, the compile phase, how many tool candidates exist at each status, how many are registered natively, and whether this browser exposes WebMCP. Call this first to orient before using the other graft_ tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
     async execute() {
       return text(describe(handlers.read()));
     },
@@ -101,6 +110,7 @@ export async function registerControlPlane(
       required: ["url"],
       additionalProperties: false,
     },
+    annotations: { untrustedContentHint: true },
     async execute(args: { url?: string }) {
       const url = String(args?.url ?? "").trim();
       if (!url) return text("Provide a url.");
@@ -132,7 +142,7 @@ export async function registerControlPlane(
       },
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
     async execute(args: { status?: string }) {
       const snapshot = handlers.read();
       const filtered = args?.status
@@ -153,7 +163,7 @@ export async function registerControlPlane(
       required: ["name"],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
     async execute(args: { name?: string }) {
       const snapshot = handlers.read();
       const tool = snapshot.tools.find((item) => item.name === args?.name);
@@ -184,6 +194,7 @@ export async function registerControlPlane(
       required: ["name", "status"],
       additionalProperties: false,
     },
+    annotations: { untrustedContentHint: true },
     async execute(args: { name?: string; status?: string }) {
       const name = String(args?.name ?? "");
       const status = args?.status === "held" ? "held" : "published";
