@@ -93,6 +93,45 @@ executeTool(list_navigation)  -> owner handler received {"offset":0,"limit":15}
 
 The last two lines are the ones that matter. Chrome's own registry lists the tools, and the arguments the exported schema declares arrive at the owner's handler unchanged. Tools left unbound are reported rather than registered as broken stubs. The script exits non-zero when any check fails, including against a page that registers no Graft tools at all.
 
+Pointing the same script at the owner site closes the circle, because Graft then reads a page that is already running an adapter Graft generated. Recorded run, 2026-08-28:
+
+```
+node scripts/smoke-export.mjs https://graft-webmcp.vercel.app/ https://graft-owner-example.vercel.app/
+
+graft_compile_url(owner site) -> 7 candidates (5 auto, 1 rejected, 1 held)
+graft_export_adapter          -> 5 of 7 eligible
+registerGraftTools            -> 3 registered, 2 reported as missingHandlers, 0 failures
+Chrome getTools()             -> get_page_outline, get_page_summary, search_catalog
+executeTool(search_catalog)   -> owner handler received {"category":"all","in_stock":false}
+```
+
+The gap between the 7 candidates found and the 5 exported is the review layer, not a shortfall:
+
+```
+get_page_summary      auto      100  R9  read-only
+get_page_outline      auto      100  R9  read-only
+search_catalog        auto      100  R1  read-only
+get_product           auto       95  R3  read-only
+list_products         auto       75  R3  read-only
+list_device_controls  rejected   35  R3  read-only
+add_to_demo_cart      held       55  R7  write
+```
+
+`add_to_demo_cart` mutates the page, so it is held rather than published and is excluded from the descriptors, shipping in the manifest as reviewed metadata. Graft does not hand an agent a write tool on a confidence score of 55. `list_device_controls` is a false positive Graft found in its own example's markup and rejected. The deployed owner site still ends up with 6 live tools, because `owner.js` reads the held candidate back out of `graftManifest`, ships its reviewed name, description, schema and annotations verbatim rather than re-declaring them, and binds a real handler to it. Graft proposes, a person ships. That promotion is a decision the export deliberately refuses to make on the owner's behalf.
+
+`node scripts/smoke-owner-site.mjs` covers the other direction, executing all 6 live tools with arguments built from each tool's own declared schema. Recorded run, 2026-08-28, 6 of 6 passing:
+
+```
+add_to_demo_cart  {"product_id":"palm-relay","quantity":1}  -> Added 1 x Palm Relay to the cart.
+get_page_outline  {}                                        -> Heading outline for this page.
+get_page_summary  {}                                        -> Signal Cabinet, 6 products listed.
+get_product       {"product_id":"palm-relay"}               -> Palm Relay, $118, In stock.
+list_products     {"offset":0,"limit":10}                   -> Returned 6 of 6 products from offset 0.
+search_catalog    {"category":"all","in_stock":false}       -> 6 of 6 products match.
+```
+
+Hand-picked arguments are how a handler and its contract drift apart unnoticed, so every value above comes from the schema the tool itself publishes.
+
 ## Judge path, under 60 seconds
 
 1. Open https://graft-webmcp.vercel.app in the ChatGPT desktop in-app browser. Alternatively, use Chrome 149 or later with `chrome://flags/#enable-webmcp-testing` enabled.
