@@ -78,6 +78,21 @@ The verifier reports what it can prove and nothing more. A check the browser can
 
 Two implementation notes worth knowing if you build against this API. Chrome takes the arguments to `executeTool` as a JSON string and returns the result as one, and the object form throws rather than coercing. The `execute` callback you register, however, receives a parsed object.
 
+## Verified export loop
+
+A green `graft_export_adapter` only proves the click happened. `node scripts/smoke-export.mjs [graft-url] [target-url]` proves the file works: it compiles a page, exports the adapter, checks a file actually landed on disk, then serves that untouched file from a throwaway origin that knows nothing about Graft, binds handlers for half the descriptors and registers the rest unbound. Set `GRAFT_CHROME_PATH` if Chrome is not where the script looks. Recorded run, 2026-08-28:
+
+```
+graft_compile_url(python.org) -> 10 candidates, 10 auto
+graft_export_adapter          -> graft-https-www-python-org-.js, 10 of 10 eligible
+downloaded                    -> one file, 10 descriptors parsed back out
+registerGraftTools            -> 5 registered, 5 reported as missingHandlers, 0 failures
+Chrome getTools()             -> exactly the 5 bound tools, on an origin Graft does not serve
+executeTool(list_navigation)  -> owner handler received {"offset":0,"limit":15}
+```
+
+The last two lines are the ones that matter. Chrome's own registry lists the tools, and the arguments the exported schema declares arrive at the owner's handler unchanged. Tools left unbound are reported rather than registered as broken stubs. The script exits non-zero when any check fails, including against a page that registers no Graft tools at all.
+
 ## Judge path, under 60 seconds
 
 1. Open https://graft-webmcp.vercel.app in the ChatGPT desktop in-app browser. Alternatively, use Chrome 149 or later with `chrome://flags/#enable-webmcp-testing` enabled.
