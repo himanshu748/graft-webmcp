@@ -92,6 +92,12 @@ Two implementation notes worth knowing if you build against this API. Chrome tak
 
 The interface remains usable when native WebMCP is unavailable, but it reports that state clearly and does not claim tools were registered.
 
+## Forcing a render
+
+Intake renders automatically when the server returns a shell. `?render=1` on `/api/fetch` forces it for a page that returns plenty of HTML but assembles its content in the browser.
+
+Measured on real commercial storefronts, rendering rarely helps: an Allbirds collection page yields 2 useful candidates from HTML and 3 rendered, and the homepages of Allbirds and Gymshark yield the same either way. Those sites are not held back by JavaScript, they are held back by markup with no semantic structure to read. That is why the retry is opt-in rather than automatic: 10 to 20 seconds for one extra held candidate is a bad default.
+
 ## Honest limits
 
 Measured against real pages, not asserted:

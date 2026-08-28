@@ -60,6 +60,7 @@ type CompilePhase = "ready" | "compiling" | "complete" | "error";
 type IntakeMode = "live" | "paste" | "fixture";
 type IntakeStatus = "idle" | "loading";
 
+
 /** Reasons where a second attempt could plausibly succeed. */
 const RETRYABLE_REASONS = new Set(["network", "status", "boot", "dns", "redirects"]);
 
@@ -543,7 +544,7 @@ export function App() {
       await WAIT(140);
       if (compileTokenRef.current !== token) return;
       const compilation = compileDocument(sourceDocument);
-      // Only owned fixtures carry a contract. A live page owes us nothing.
+
       const missingTools =
         source.kind === "fixture"
           ? missingExpectedTools(getFixture(source.id as FixtureId).expectedTools, compilation.tools)

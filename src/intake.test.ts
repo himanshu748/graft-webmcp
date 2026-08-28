@@ -95,9 +95,26 @@ describe("egress guard used by the renderer", () => {
     expect(await isHostAllowedForEgress("localhost")).toBe(false);
   });
 
+  it("blocks a host that cannot be resolved at all", async () => {
+    // Unresolvable means unknown, and unknown is not permission to connect.
+    expect(await isHostAllowedForEgress("no-such-host.invalid")).toBe(false);
+  });
+
   it("blocks a public hostname that resolves to a private address", async () => {
     // localtest.me and its subdomains resolve to 127.0.0.1 by design, which is
-    // exactly the shape a pattern match misses and a DNS lookup catches.
+    // exactly the shape a pattern match misses and a DNS lookup catches. This
+    // one needs working DNS, so it reports rather than flakes when offline.
+    let resolvable = true;
+    try {
+      const { lookup } = await import("node:dns/promises");
+      await lookup("anything.localtest.me");
+    } catch {
+      resolvable = false;
+    }
+    if (!resolvable) {
+      console.warn("skipped: DNS unavailable, cannot exercise the resolving guard");
+      return;
+    }
     expect(await isHostAllowedForEgress("anything.localtest.me")).toBe(false);
   });
 

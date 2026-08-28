@@ -17,6 +17,8 @@ export interface SourceMeta {
 
 export interface ActiveSource {
   kind: SourceKind;
+  /** True when the markup came from the headless renderer rather than the server. */
+  rendered?: boolean;
   id: string;
   label: string;
   sourceUrl: string;
@@ -98,8 +100,14 @@ export class IntakeRequestError extends Error {
   }
 }
 
-export async function fetchLiveSource(rawUrl: string, signal?: AbortSignal): Promise<ActiveSource> {
-  const response = await fetch(`/api/fetch?url=${encodeURIComponent(rawUrl)}`, { signal });
+export async function fetchLiveSource(
+  rawUrl: string,
+  signal?: AbortSignal,
+  options: { render?: boolean } = {},
+): Promise<ActiveSource> {
+  const query = new URLSearchParams({ url: rawUrl });
+  if (options.render) query.set("render", "1");
+  const response = await fetch(`/api/fetch?${query.toString()}`, { signal });
   let payload: any;
   try {
     payload = await response.json();

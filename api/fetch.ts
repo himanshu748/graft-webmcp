@@ -217,8 +217,12 @@ export default async function handler(req: any, res: any) {
     let markup = body;
     let source: "html" | "browser" = "html";
     const rendered = clientRenderedReport(body);
+    // A large commercial page is not a shell, but its content can still be
+    // assembled by JavaScript. The client asks for a render when the HTML it
+    // got compiled into almost nothing.
+    const forced = req.query?.render === "1";
 
-    if (rendered.shell) {
+    if (rendered.shell || forced) {
       // The server sent a shell. Executing the page is the only way to see it,
       // so it is attempted here rather than at the top: a page that renders on
       // the server never pays this cost.
@@ -227,7 +231,10 @@ export default async function handler(req: any, res: any) {
         : null;
       const paintedReport = painted ? clientRenderedReport(painted) : null;
 
-      if (!painted || paintedReport?.shell) {
+      if (forced && painted) {
+        markup = painted;
+        source = "browser";
+      } else if (!painted || paintedReport?.shell) {
         throw new IntakeError(
           422,
           "client-rendered",
@@ -236,10 +243,10 @@ export default async function handler(req: any, res: any) {
             ? `Graft loaded the page in a headless browser and still read only ${paintedReport?.textLength ?? 0} characters of text. It may require sign-in, or block automated browsers.`
             : `Graft read the HTML the server sends and got ${rendered.textLength} characters of text. Browser rendering is disabled on this deployment.`,
         );
+      } else {
+        markup = painted;
+        source = "browser";
       }
-
-      markup = painted;
-      source = "browser";
     }
 
     const stripped = STRIPPED_HEADERS.filter((header) => response.headers.has(header));
