@@ -347,7 +347,7 @@ The official rules use four equally weighted Stage Two criteria:
 | --- | --- |
 | **WebMCP Leverage** | Typed runtime contracts, direct annotations, registration lifecycle, cancellation and live execution |
 | **Execution** | Coherent first-run flow, three deterministic fixtures, honest browser diagnostics and tested failure states |
-| **Potential Impact** | Two owners, both real. The migration loop completes end to end on a separate origin, and the verifier finds 10 of 10 contract violations on a production Shopify storefront. See [Case study](#case-study-the-two-owners-this-is-for) |
+| **Potential Impact** | Two owners, both real. The migration loop completes end to end on a separate origin, and on a production Shopify storefront 10 of 10 contracts trigger quality warnings against Chrome's current guidance. See [Case study](#case-study-the-two-owners-this-is-for) |
 | **Creativity & Ambition** | A DOM compiler and repair bench that previews the agent surface before source integration |
 
 Stage One is pass or fail on viability, theme fit and meaningful API use. The submission must also include a working live URL, a public repository with a visible OSS license, an English write-up and a public YouTube demo under three minutes with audio.
