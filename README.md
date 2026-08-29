@@ -56,6 +56,40 @@ get_product("Palm Relay")          → "Palm Relay, $118, In stock"
 add_to_demo_cart("palm-relay", 2)  → cart goes "Empty" → "2 x Palm Relay ($118)"
 ```
 
+## Case study: the two owners this is for
+
+**Owner one has semantic HTML and no agent interface.** This is most of the web. Signal Cabinet is that owner, and the loop completes:
+
+| Step | What happens | Evidence |
+| --- | --- | --- |
+| Discover | Graft reads the page once, server side, scripts stripped | 7 candidates from search form, product articles and a cart form |
+| Review | Each candidate scored with its reasons | 5 auto, 1 held (`add_to_demo_cart`, a write), 1 rejected (`list_device_controls`, a false positive at 35) |
+| Ship | Owner binds handlers to the exported adapter | 5 descriptors shipped, the held write promoted by hand with its reviewed contract intact |
+| Verify | Graft opens the deployed site and reads what it really registers | 6 tools live on an origin Graft does not serve, contracts well formed, no collisions |
+| Maintain | Drift reported against the contract that was exported | all reviewed tools live, 1 addition declared |
+
+The owner writes handlers. Graft writes nothing that reaches production without a person approving it, which is why the write tool needed a human and the false positive never left the manifest.
+
+**Owner two already shipped WebMCP, and cannot tell whether it is correct.** Shopify has rolled WebMCP out to storefronts, so this owner already exists at scale. `graft_verify_url("https://www.allbirds.com")` on a production storefront nobody involved here controls:
+
+```
+Verdict: fail (3/4 decisive checks, 0 inconclusive)
+Tools registered: 10 (search_catalog, browse_store, get_product, show_variant, get_cart,
+                      update_cart, cancel_cart, proceed_to_checkout, manage_orders,
+                      search_shop_policies_and_faqs)
+PASS  The site registers at least one tool
+FAIL  Every contract is well formed: 10 of 10 contracts have issues
+PASS  Tool names are unique
+
+get_product   description is 903 chars, over 500; schema allows additional properties
+browse_store  description is 891 chars, over 500; schema allows additional properties
+update_cart   description is 633 chars, over 500; parameter "cart" has no description
+```
+
+Ten for ten, against Chrome's own published budgets. That is not a knock on Shopify, it is the point: the standard is new enough that a careful production implementation still drifts from the guidance, and nothing in the platform tells an owner so. A verifier that runs against a URL, from outside, with no cooperation from the site, is the cheapest way to find out.
+
+The two owners need opposite halves of the same tool. One needs contracts proposed. The other needs contracts checked. Graft is the same pipeline read in both directions, which is why `graft_verify_url` exists alongside `graft_compile_url`.
+
 ## Verified native surface
 
 `CHROME_PATH=/path/to/chrome node scripts/verify-native.mjs [url]` drives the deployed site, or an optional URL, in a real Chrome and prints what actually happens. `CHROME_PATH` is optional when Chrome is installed in a standard system location. Recorded run, 2026-08-27:
@@ -313,7 +347,7 @@ The official rules use four equally weighted Stage Two criteria:
 | --- | --- |
 | **WebMCP Leverage** | Typed runtime contracts, direct annotations, registration lifecycle, cancellation and live execution |
 | **Execution** | Coherent first-run flow, three deterministic fixtures, honest browser diagnostics and tested failure states |
-| **Potential Impact** | A concrete migration workflow for owners who have useful page semantics but no WebMCP contract yet |
+| **Potential Impact** | Two owners, both real. The migration loop completes end to end on a separate origin, and the verifier finds 10 of 10 contract violations on a production Shopify storefront. See [Case study](#case-study-the-two-owners-this-is-for) |
 | **Creativity & Ambition** | A DOM compiler and repair bench that previews the agent surface before source integration |
 
 Stage One is pass or fail on viability, theme fit and meaningful API use. The submission must also include a working live URL, a public repository with a visible OSS license, an English write-up and a public YouTube demo under three minutes with audio.
