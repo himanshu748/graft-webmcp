@@ -22,10 +22,10 @@ The implementation must preserve five invariants:
 ## 2. System shape
 
 ```text
-owned fixture HTML
+public URL, pasted HTML or owned fixture
       |
       v
-inert parse -> sanitize -> normalized snapshot
+guarded intake -> inert parse -> sanitize -> normalized snapshot
                               |
                               v
                     semantic recipe compiler
@@ -43,7 +43,7 @@ inert parse -> sanitize -> normalized snapshot
           reviewed manifest/export
 ```
 
-There is no server, remote registry, target fetcher, credential bridge or third-party write path in P0.
+The server surface is deliberately narrow: `/api/fetch` performs guarded public-page intake and `/api/verify` reads a deployed page's registered WebMCP surface. There is no remote registry, credential bridge or third-party write path. The server stores no target content and forwards no browser credentials.
 
 ## 3. Runtime modules
 
@@ -76,7 +76,10 @@ The compiler and lifecycle entry point lives at `src/lib/index.ts`. UI code cons
 
 ```text
 graft/
+  api/                         guarded intake, rendering and deployment verification
   public/fixtures/             owned standalone fixture pages
+  examples/owner-site/         separate-origin adapter integration proof
+  scripts/                     export, owner-site and native browser smoke checks
   src/
     data/
       fixtureHtml/             fixture source imported as inert text
@@ -103,8 +106,9 @@ graft/
 | --- | --- | --- |
 | [React 19](https://react.dev/) | Workbench UI and local state | No server rendering or React-specific tool runtime |
 | [TypeScript 5](https://www.typescriptlang.org/docs/) | Contract validation at build time | Runtime inputs still require explicit validation |
-| [Vite 7](https://vite.dev/) | Local development and static production bundle | No privileged backend |
+| [Vite 7](https://vite.dev/) | Local development and static production bundle | Dev mounts the same intake and verify handlers used in production |
 | [Vitest](https://vitest.dev/) and [jsdom](https://github.com/jsdom/jsdom) | Deterministic compiler and sanitizer tests | Native WebMCP still needs a headed browser check |
+| [Puppeteer Core](https://pptr.dev/) and serverless Chromium | Render shell pages and read deployed WebMCP registrations | Requests are host-checked, credential-free and sanitized before reaching the client |
 | [WebMCP imperative API](https://developer.chrome.com/docs/ai/webmcp/imperative-api) | Register and execute approved page tools | Experimental browser surface, feature-detected |
 | `localStorage` | Versioned reviewed overrides | No raw snapshot, call history or demo-cart persistence |
 
@@ -330,7 +334,7 @@ npm run build
 npm run dev
 ```
 
-`npm run preview` serves the production build locally after `npm run build`.
+`npm run dev` mounts the production intake and verification handlers at `/api/fetch` and `/api/verify`. `npm run preview` serves only the static production bundle after `npm run build`.
 
 ## 13. Failure behavior
 
@@ -345,7 +349,7 @@ npm run dev
 
 ## 14. Demo and submission flow
 
-The submission path is Signal Cabinet compile, read-tool invocation, held-tool review, confirmed local mutation, Basin Ledger generality proof and export. The complete recording script, recovery branches and packaging checklist live in [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md).
+The finished submission video follows eight acts: migration gap, compile, inspect, execute, govern, owner-side action, external verification and close. It shows Graft's seven live control tools, a real `list_products` call, a held write, a separate owner adapter, a real `add_to_demo_cart` result and an exact 5 of 5 deployment verification. The exact timing and evidence checklist live in [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md).
 
 Before submission, verify the production URL in both official judge browser paths, run the build and test commands from a clean install and confirm the public repository exposes its MIT license.
 

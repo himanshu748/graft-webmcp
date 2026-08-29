@@ -180,6 +180,18 @@ Hand-picked arguments are how a handler and its contract drift apart unnoticed, 
 
 The interface remains usable when native WebMCP is unavailable, but it reports that state clearly and does not claim tools were registered.
 
+## Visual proof
+
+These stills come from the same live surfaces used in the judge path.
+
+| Graft's own WebMCP control surface | Explainable candidate contract |
+| --- | --- |
+| ![Seven live Graft control tools](docs/screenshots/01-control-tools.png) | ![List products schema, annotations and confidence evidence](docs/screenshots/04-confidence-evidence.png) |
+
+| Native tool execution | Separate owner site called through WebMCP |
+| --- | --- |
+| ![Successful WebMCP call with arguments and result](docs/screenshots/05-execution-timeline.png) | ![ChatGPT WebMCP call to the owner adapter for Palm Relay](docs/screenshots/09-owner-site-cart.png) |
+
 ## Forcing a render
 
 Intake renders automatically when the server returns a shell. `?render=1` on `/api/fetch` forces it for a page that returns plenty of HTML but assembles its content in the browser.
@@ -286,13 +298,15 @@ npm run build
 npm run preview
 ```
 
+`npm run dev` mounts the real `api/fetch.ts` and `api/verify.ts` handlers, so a local clone can exercise compilation and deployment verification without a second mock server. Verification still needs a locally available WebMCP-capable Chrome build.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the Vite development server |
 | `npm test` | Run deterministic Vitest coverage once |
 | `npm run test:watch` | Run Vitest in watch mode |
 | `npm run build` | Type-check and create the production bundle |
-| `npm run preview` | Serve the production bundle locally |
+| `npm run preview` | Serve the static production bundle locally; use `npm run dev` when API routes are required |
 
 ## Browser setup
 
