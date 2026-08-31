@@ -2382,3 +2382,72 @@ button:disabled {
   font-size: 0.75rem;
   line-height: 1.5;
 }
+
+.final-snippet {
+  margin-top: 1.25rem;
+  padding: 0.9rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  overflow-x: auto;
+}
+
+/* The unavailable state is the common one, so it explains itself in place. */
+.connection-help {
+  position: relative;
+}
+.connection-help > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.connection-help > summary::-webkit-details-marker {
+  display: none;
+}
+.connection-more {
+  padding-left: 0.6rem;
+  margin-left: 0.55rem;
+  border-left: 1px solid var(--border-strong);
+  color: var(--muted-foreground);
+}
+.connection-help[open] > summary .connection-more {
+  color: var(--foreground);
+}
+.connection-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.6rem);
+  z-index: 40;
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 1.1rem 1.25rem;
+  background: var(--popover);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  text-align: left;
+}
+.connection-panel p + p {
+  margin-top: 0.7rem;
+}
+.connection-panel strong {
+  color: var(--foreground);
+}
+.connection-panel ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+.connection-panel li + li {
+  margin-top: 0.4rem;
+}
+.connection-panel code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}

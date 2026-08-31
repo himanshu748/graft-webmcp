@@ -48,6 +48,7 @@ import {
   serializeSanitizedDocument,
 } from "./sanitize";
 import { buildAdapterModule } from "./export-adapter";
+import graftRuntimeSource from "./generated/graft-runtime.js?raw";
 import { runLiveSearch } from "./liveSearch";
 import {
   CONTROL_TOOLS,
@@ -415,6 +416,7 @@ export function App() {
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [argumentValues, setArgumentValues] = useState<Record<string, string>>({});
   const [mobileView, setMobileView] = useState<MobileBenchView>("tools");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "downloaded">("idle");
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
@@ -944,7 +946,7 @@ export function App() {
     }
   }, [addTimelineEntry, argumentValues, requestConfirmation, selectedTool]);
 
-  const exportAdapter = useCallback(() => {
+  const buildExport = useCallback(() => {
     if (!snapshot || tools.length === 0) return null;
     const manifest = {
       product: "Graft",
@@ -957,6 +959,8 @@ export function App() {
       },
       generatedAt: new Date().toISOString(),
       notice: "Migration starting point. Review and test in the owner site before shipping.",
+      // The binding fields travel with the contract so the inlined runtime can
+      // resolve the same element the compiler scored.
       tools: tools.map((tool) => ({
         name: tool.name,
         description: tool.description,
@@ -968,26 +972,50 @@ export function App() {
         status: tool.status,
         recipe: tool.recipe,
         selector: tool.selector,
+        fallbackSelectors: tool.fallbackSelectors,
+        action: tool.action,
+        readOnly: tool.readOnly,
+        destructive: tool.destructive,
+        binding: tool.binding,
       })),
     };
 
-    const descriptors = manifest.tools
+    const exported = manifest.tools
       .filter((tool) => tool.status === "auto" || tool.status === "published")
-      .map(({ status: _status, recipe: _recipe, selector: _selector, ...descriptor }) => descriptor);
-    const source = buildAdapterModule(manifest, descriptors);
-    const blob = new Blob([source], { type: "text/javascript;charset=utf-8" });
+      .map(({ status: _status, ...tool }) => tool);
+    const source = buildAdapterModule(manifest, exported, graftRuntimeSource);
+    const fileName = `graft-${(compiledSourceKey ?? "adapter").replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}.js`;
+    return { source, fileName, toolCount: manifest.tools.length, eligible: exported.length };
+  }, [activeSource, compiledSourceKey, snapshot, tools]);
+
+  const exportAdapter = useCallback(() => {
+    const built = buildExport();
+    if (!built) return null;
+    const blob = new Blob([built.source], { type: "text/javascript;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `graft-${(compiledSourceKey ?? "adapter").replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}.js`;
+    anchor.download = built.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-    return {
-      fileName: anchor.download,
-      toolCount: manifest.tools.length,
-      eligible: descriptors.length,
-    };
-  }, [activeSource, compiledSourceKey, snapshot, tools]);
+    return { fileName: built.fileName, toolCount: built.toolCount, eligible: built.eligible };
+  }, [buildExport]);
+
+  const copyAdapter = useCallback(async () => {
+    const built = buildExport();
+    if (!built) return null;
+    try {
+      await navigator.clipboard.writeText(built.source);
+      setCopyState("copied");
+    } catch {
+      // Every insecure context and some browsers refuse clipboard writes. A
+      // button that silently does nothing is worse than one that falls back.
+      exportAdapter();
+      setCopyState("downloaded");
+    }
+    window.setTimeout(() => setCopyState("idle"), 2600);
+    return built;
+  }, [buildExport, exportAdapter]);
 
   controlStateRef.current = {
     sourceUrl: activeSource?.sourceUrl ?? "",
@@ -1044,10 +1072,37 @@ export function App() {
             <a href="#method">Method</a>
             <a href="#trust-title">Trust</a>
           </nav>
-          <div className="connection-state" data-connected={connected} aria-live="polite">
-            <span className="connection-light" aria-hidden="true" />
-            <span>{controlRegistrationLabel(registration, controlToolNames.length)}</span>
-          </div>
+          {registration.available ? (
+            <div className="connection-state" data-connected={connected} aria-live="polite">
+              <span className="connection-light" aria-hidden="true" />
+              <span>{controlRegistrationLabel(registration, controlToolNames.length)}</span>
+            </div>
+          ) : (
+            /* A bare "not detected" badge reads as a broken demo. It is the one
+               state most visitors land in, so it has to say what still works. */
+            <details className="connection-help">
+              <summary className="connection-state" data-connected={false}>
+                <span className="connection-light" aria-hidden="true" />
+                <span>WebMCP not detected</span>
+                <span className="connection-more">What this means</span>
+              </summary>
+              <div className="connection-panel">
+                <p>
+                  <strong>Nothing here is broken.</strong> Your browser has no WebMCP API yet, so
+                  tools cannot register natively. Compiling, the scored evidence and running each
+                  tool from the inspector all work on this page right now.
+                </p>
+                <p>To let an agent call the tools instead of you:</p>
+                <ul>
+                  <li>
+                    Chrome 149 or later, with <code>chrome://flags/#enable-webmcp-testing</code>{" "}
+                    enabled, then restart.
+                  </li>
+                  <li>Or open this page in the ChatGPT desktop in-app browser.</li>
+                </ul>
+              </div>
+            </details>
+          )}
         </div>
       </header>
 
@@ -1890,9 +1945,16 @@ export function App() {
               <p className="kicker">Ship from the owner site</p>
               <h2 id="final-title">Make an existing page legible to agents.</h2>
               <p>
-                Start with a controlled snapshot, review every contract and export the adapter as
-                a migration starting point.
+                Start with a controlled snapshot, review every contract and export one file. The
+                runtime ships inside it, so the reviewed tools run against your live DOM with no
+                handlers to write and no dependency on Graft.
               </p>
+              <pre className="final-snippet">
+{`<script type="module">
+  import { registerGraftTools } from "./graft-adapter.js";
+  await registerGraftTools();
+</script>`}
+              </pre>
             </div>
             <div className="final-actions">
               <a className="final-action" href="#compiler-bench">
@@ -1907,6 +1969,21 @@ export function App() {
               >
                 <span>Download reviewed adapter</span>
                 <DownloadSimple size={20} weight="bold" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="final-action"
+                disabled={tools.length === 0}
+                onClick={() => void copyAdapter()}
+              >
+                <span>
+                  {copyState === "copied"
+                    ? "Copied to clipboard"
+                    : copyState === "downloaded"
+                      ? "Clipboard blocked, downloaded instead"
+                      : "Copy adapter source"}
+                </span>
+                <ArrowRight size={20} weight="bold" aria-hidden="true" />
               </button>
             </div>
           </div>
