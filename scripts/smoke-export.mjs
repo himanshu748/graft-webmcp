@@ -67,7 +67,7 @@ if (written.length !== 1) {
 
 const adapterName = written[0];
 const source = readFileSync(join(downloadDir, adapterName), "utf8");
-const descriptorBlock = source.match(/export const graftDescriptors = ([\s\S]*?);\n/);
+const descriptorBlock = source.match(/export const graftTools = ([\s\S]*?);\n/);
 let descriptors = [];
 try {
   descriptors = JSON.parse(descriptorBlock?.[1] ?? "null") ?? [];
@@ -80,10 +80,13 @@ if (descriptors.length === 0) {
   process.exit(1);
 }
 
-// Bind handlers for a subset so the unbound half proves it is reported rather
-// than registered as a broken stub.
-const bound = descriptors.slice(0, Math.max(1, Math.ceil(descriptors.length / 2))).map((d) => d.name);
-const unbound = descriptors.map((d) => d.name).filter((name) => !bound.includes(name));
+// The adapter now carries its own runtime, so every exported tool must register
+// with no owner code at all. One name is overridden to prove an owner can still
+// take a tool back.
+const all = descriptors.map((d) => d.name);
+const overridden = descriptors.find((d) => Object.keys(d.inputSchema?.properties ?? {}).length > 0)?.name ?? all[0];
+const bound = all;
+const unbound = [];
 
 // Step 3: serve the untouched file from an origin that knows nothing about Graft.
 writeFileSync(
@@ -91,15 +94,14 @@ writeFileSync(
   `<!doctype html><meta charset="utf-8"><title>Adapter host</title>
 <script type="module">
 import { registerGraftTools } from "./${adapterName}";
-const bound = ${JSON.stringify(bound)};
-const handlers = {};
-for (const name of bound) {
-  handlers[name] = async (args) => ({
-    content: [{ type: "text", text: "owner handler " + name + " received " + JSON.stringify(args ?? {}) }],
-  });
-}
+const overridden = ${JSON.stringify(overridden)};
+const handlers = {
+  [overridden]: async (args) => ({
+    content: [{ type: "text", text: "owner handler " + overridden + " received " + JSON.stringify(args ?? {}) }],
+  }),
+};
 try {
-  window.__graftReport = await registerGraftTools(handlers);
+  window.__graftReport = await registerGraftTools({ handlers });
 } catch (error) {
   window.__graftReport = { threw: error instanceof Error ? error.message : String(error) };
 }
@@ -130,13 +132,13 @@ check(pageErrors.length === 0, "the adapter loads without a page error", pageErr
 const report = await host.evaluate(() => window.__graftReport ?? { missing: true });
 check(!report.missing && !report.threw, "registerGraftTools returned a report", report.threw ?? "");
 check(
-  JSON.stringify(report.registered ?? []) === JSON.stringify(bound),
-  "every bound descriptor registered",
+  JSON.stringify(report.registered ?? []) === JSON.stringify(all),
+  "every exported tool registered with no owner handlers",
   `registered ${JSON.stringify(report.registered ?? [])}`,
 );
 check(
-  JSON.stringify(report.missingHandlers ?? []) === JSON.stringify(unbound),
-  "unbound descriptors are reported, not registered",
+  (report.missingHandlers ?? []).length === 0,
+  "the bundled runtime leaves no tool unbound",
   `missingHandlers ${JSON.stringify(report.missingHandlers ?? [])}`,
 );
 check((report.failures ?? []).length === 0, "no registration failed", JSON.stringify(report.failures ?? []));
@@ -157,7 +159,7 @@ check(
 // what answers, using an argument the exported schema actually declares.
 // Prefer a tool that declares arguments, so the argument check is not vacuous.
 const probe = descriptors
-  .filter((descriptor) => bound.includes(descriptor.name))
+  .filter((descriptor) => descriptor.name === overridden)
   .sort(
     (a, b) =>
       Object.keys(b.inputSchema?.properties ?? {}).length -
@@ -195,6 +197,6 @@ check(
 server.close();
 await browser.close();
 
-console.log(`\nAdapter: ${adapterName} (${descriptors.length} descriptors, ${bound.length} bound for this run)`);
+console.log(`\nAdapter: ${adapterName} (${descriptors.length} tools, runtime-bound, 1 overridden)`);
 console.log(failures.length === 0 ? "Export loop verified end to end." : `${failures.length} check(s) failed.`);
 process.exit(failures.length > 0 ? 1 : 0);
