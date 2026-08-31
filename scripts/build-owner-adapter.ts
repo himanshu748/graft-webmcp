@@ -34,18 +34,28 @@ const manifest = {
     status: tool.status,
     recipe: tool.recipe,
     selector: tool.selector,
+    fallbackSelectors: tool.fallbackSelectors,
+    action: tool.action,
+    readOnly: tool.readOnly,
+    destructive: tool.destructive,
+    binding: tool.binding,
   })),
 };
 
-const descriptors = manifest.tools
+const exported = manifest.tools
   .filter((tool) => tool.status === "auto" || tool.status === "published")
-  .map(({ status: _s, recipe: _r, selector: _sel, ...descriptor }) => descriptor);
+  .map(({ status: _s, ...tool }) => tool);
+
+const runtimeSource = readFileSync("src/generated/graft-runtime.js", "utf8");
 
 mkdirSync("examples/owner-site", { recursive: true });
-writeFileSync("examples/owner-site/graft-adapter.js", buildAdapterModule(manifest, descriptors));
+writeFileSync(
+  "examples/owner-site/graft-adapter.js",
+  buildAdapterModule(manifest, exported, runtimeSource),
+);
 
 console.log(`derived ${compilation.tools.length} candidates`);
 for (const tool of compilation.tools) {
   console.log(`  ${tool.name.padEnd(22)} ${tool.status.padEnd(10)} ${tool.confidence}`);
 }
-console.log(`\nexported ${descriptors.length} descriptors to examples/owner-site/graft-adapter.js`);
+console.log(`\nexported ${exported.length} tools to examples/owner-site/graft-adapter.js`);
