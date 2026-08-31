@@ -4,6 +4,7 @@ import {
   executeTool,
   type ExecuteToolOptions,
   type ToolConfirmationRequest,
+  toContentResult,
 } from "./execute";
 import type {
   GraftLifecycleEvent,
@@ -302,14 +303,7 @@ export class WebMCPRegistry {
           status,
           durationMs: Math.max(0, Date.now() - startedAt),
         });
-        // The spec's execute contract returns content blocks. Returning the raw
-        // internal result would hand the agent a shape it has no reason to
-        // understand, so the structured payload rides alongside the text.
-        return {
-          content: [{ type: "text", text: result.message }],
-          ...(result.data ? { structuredContent: result.data } : {}),
-          ...(result.ok ? {} : { isError: true }),
-        };
+        return toContentResult(result);
       },
     };
   }

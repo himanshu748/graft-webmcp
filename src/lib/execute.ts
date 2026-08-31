@@ -16,6 +16,7 @@ import type {
   GraftTool,
   JsonValue,
   SnapshotRow,
+  ToolContentResult,
   ToolExecutionResult,
 } from "./types";
 
@@ -803,6 +804,19 @@ export function waitForDomSettled(
     timeoutTimer = view?.setTimeout(() => finish(), timeoutMs) ?? 0;
     scheduleQuiet();
   });
+}
+
+/**
+ * The spec's execute contract returns content blocks. Returning the raw internal
+ * result would hand the agent a shape it has no reason to understand, so the
+ * structured payload rides alongside the text.
+ */
+export function toContentResult(result: ToolExecutionResult): ToolContentResult {
+  return {
+    content: [{ type: "text", text: result.message }],
+    ...(result.data ? { structuredContent: result.data } : {}),
+    ...(result.ok ? {} : { isError: true as const }),
+  };
 }
 
 export async function executeTool(

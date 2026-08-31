@@ -75,10 +75,19 @@ describe("exported adapter registration", () => {
   });
 
   it("emits an async owner adapter with cleanup and rollback reporting", () => {
-    const source = buildAdapterModule({ product: "Graft" }, descriptors);
+    const source = buildAdapterModule({ product: "Graft" }, descriptors, "var GraftRuntime = {};");
     expect(source).toContain("export async function registerGraftTools");
     expect(source).toContain("await modelContext.registerTool");
     expect(source).toContain("await cleanup()");
     expect(source).toContain("rolledBack");
+  });
+
+  it("inlines the runtime and wires handlers without owner code", () => {
+    const source = buildAdapterModule({ product: "Graft" }, descriptors, "var GraftRuntime = {};");
+    expect(source).toContain("var GraftRuntime = {};");
+    expect(source).toContain("GraftRuntime.createGraftHandlers(graftTools, runtimeOptions)");
+    // Owner overrides must win over the generated handler for the same name.
+    expect(source).toContain("const handlers = { ...generated, ...overrides };");
+    expect(source).not.toContain("Pass owner-implemented handlers");
   });
 });
