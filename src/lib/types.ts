@@ -268,7 +268,8 @@ export type GraftLifecycleEvent =
       type: "execution_finished";
       name: string;
       args: Record<string, JsonValue>;
-      result: ToolExecutionResult;
+      /** The exact response shape returned across the WebMCP boundary. */
+      result: ToolContentResult;
       status: "success" | "error" | "cancelled";
       durationMs: number;
     }

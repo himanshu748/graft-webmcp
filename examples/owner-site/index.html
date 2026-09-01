@@ -411,6 +411,26 @@
       color: var(--muted);
     }
 
+    .owner-cart-proof {
+      width: min(100% - 32px, 1240px);
+      margin: 24px auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+    }
+
+    .owner-cart-proof h2 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    .owner-cart-proof ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
     footer {
       padding-block: 24px 34px;
       border-top: 1px solid var(--line);
@@ -656,9 +676,9 @@
   <footer class="shell">
     Original sample content for Graft. Prices and products are fictional.
   </footer>
-  <section id="owner-cart" aria-live="polite" style="width:min(100% - 32px,1240px);margin:24px auto;padding:16px;border:1px solid #969990;border-radius:4px;background:#f4f4ed">
-    <h2 style="margin:0 0 8px;font-size:16px">Cart</h2>
-    <ul id="owner-cart-items" style="margin:0;padding-left:18px"><li id="owner-cart-empty">Empty</li></ul>
+  <section id="owner-cart" class="owner-cart-proof" aria-live="polite">
+    <h2>Cart</h2>
+    <ul id="owner-cart-items"><li id="owner-cart-empty">Empty</li></ul>
   </section>
   <script type="module" src="./owner.js"></script>
 </body>

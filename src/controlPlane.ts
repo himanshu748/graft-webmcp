@@ -217,7 +217,7 @@ export async function registerControlPlane(
   await register({
     name: "graft_export_adapter",
     description:
-      "Download the reviewed contract as a JavaScript adapter the site owner can bind handlers to. Returns the file name and how many candidates are eligible to register. The download happens in the browser, so the file is saved locally rather than returned here.",
+      "Download a self-contained JavaScript adapter for the reviewed contract. Approved read tools run from its bundled DOM runtime; held writes stay in the manifest until the owner binds a handler. Returns the file name and how many candidates are eligible to register.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     async execute() {
       const result = handlers.exportAdapter();

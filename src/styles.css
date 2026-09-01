@@ -1284,6 +1284,17 @@ button:disabled {
   overscroll-behavior: auto;
 }
 
+/* An opened proof belongs to the page flow, not a 190px scroll trap. Keep the
+   compact history when rows are collapsed, then make the selected wire payload
+   genuinely inspectable at desktop and recording widths. */
+.call-timeline:has(.timeline-detail[open]) {
+  max-height: none;
+}
+
+.timeline-rows:has(.timeline-detail[open]) {
+  max-height: min(75vh, 640px);
+}
+
 .timeline-empty {
   display: grid;
   min-height: 100px;
@@ -1351,6 +1362,10 @@ button:disabled {
   color: var(--muted-foreground);
   cursor: pointer;
   font-size: 0.75rem;
+}
+
+.timeline-detail[open] summary {
+  color: var(--primary);
 }
 
 .timeline-json-grid {
@@ -1466,7 +1481,7 @@ button:disabled {
 }
 
 .trust-lead > p:last-child,
-.final-copy > p:last-child {
+.final-copy > p:not(.kicker) {
   max-width: 52ch;
   margin: 1.25rem 0 0;
   color: var(--muted-foreground);
@@ -1528,6 +1543,42 @@ button:disabled {
   max-width: 14ch;
 }
 
+.install-steps {
+  display: grid;
+  max-width: 680px;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border-strong);
+  list-style: none;
+}
+
+.install-steps li {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.install-steps li > span {
+  padding-top: 0.1rem;
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.install-steps strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.install-steps p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
 .final-actions {
   display: grid;
   width: min(100%, 310px);
@@ -1557,6 +1608,39 @@ button:disabled {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
+}
+
+.export-receipt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem 1rem;
+  border-left: 2px solid var(--success);
+  background: var(--background);
+}
+
+.export-receipt > svg {
+  margin-top: 0.1rem;
+  color: var(--success);
+}
+
+.export-receipt strong,
+.export-receipt span {
+  display: block;
+}
+
+.export-receipt strong {
+  font-size: 0.8125rem;
+}
+
+.export-receipt span {
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .site-footer {
@@ -2438,7 +2522,7 @@ button:disabled {
 .final-snippet {
   margin-top: 1.25rem;
   padding: 0.9rem 1rem;
-  background: var(--card);
+  background: var(--background);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
   font-family: var(--font-mono);
@@ -2446,6 +2530,8 @@ button:disabled {
   line-height: 1.6;
   color: var(--muted-foreground);
   overflow-x: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* The unavailable state is the common one, so it explains itself in place. */

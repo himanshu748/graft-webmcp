@@ -294,13 +294,15 @@ Only reviewed overrides and non-sensitive UI preferences may be stored in `local
 
 The downloaded JavaScript adapter contains:
 
-- A versioned JSON manifest of validated tool descriptors and provenance
-- A filtered `graftDescriptors` array for only `auto` and `published` tools
-- `registerGraftTools(handlers)`, which maps descriptors to owner-implemented handlers
+- A versioned `graftManifest` with every reviewed candidate, provenance, binding and status
+- A filtered `graftTools` array containing only `auto` and `published` contracts
+- The audited DOM execution runtime for approved read tools
+- `registerGraftTools({ handlers })`, with optional owner overrides for generated handlers
 - Awaited WebMCP registration with annotations, partial-registration rollback, a structured report and an async cleanup function
+- Held writes as manifest metadata only, never silently registered without owner code
 - A clear owner-review and integration-test warning
 
-The bundle must not contain fixture page HTML, imported scripts, browser storage or live functions serialized from the application. Graft is exporting a reviewed migration artifact, not claiming the preview executor is production business logic.
+The bundle must not contain fixture page HTML, imported scripts, browser storage or live functions serialized from the application. The inlined runtime resolves only the reviewed selectors and recipes. Consequential business logic remains owner-authored.
 
 ## 12. Verification
 
@@ -315,7 +317,7 @@ The bundle must not contain fixture page HTML, imported scripts, browser storage
 - Execution cancellation produces no local mutation.
 - `add_to_demo_cart` rejects unknown product IDs and quantities outside 1 to 3.
 - Local overrides validate, merge and persist through a recompile.
-- Export contains annotations, eligible descriptors, awaited `registerGraftTools(handlers)`, rollback reporting, cleanup and no active imported content.
+- Export contains annotations, eligible contracts, the bundled read runtime, awaited `registerGraftTools({ handlers })`, rollback reporting, cleanup and no active imported content.
 
 ### Browser checks
 

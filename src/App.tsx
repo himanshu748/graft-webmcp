@@ -36,6 +36,7 @@ import {
   compileDocument,
   coerceToolArguments,
   executeTool,
+  toContentResult,
   WebMCPRegistry,
   type GraftLifecycleEvent,
   type GraftTool,
@@ -83,6 +84,12 @@ interface TimelineEntry {
   state: RunState;
 }
 
+interface ExportFeedback {
+  kind: "copied" | "prepared";
+  fileName: string;
+  eligible: number;
+}
+
 interface PendingConfirmation {
   toolName: string;
   args: Record<string, unknown>;
@@ -116,6 +123,15 @@ const EMPTY_REGISTRATION: ToolRegistrationReport = {
 const WAIT = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 const DEMO_OUTPUT_BUDGET = 8_000;
+
+function adapterFileName(sourceKey: string | null): string {
+  const slug = (sourceKey ?? "adapter")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "") || "adapter";
+  return `graft-${slug}.js`;
+}
 
 function serializeJson(value: unknown, spacing?: number): string {
   try {
@@ -416,7 +432,7 @@ export function App() {
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [argumentValues, setArgumentValues] = useState<Record<string, string>>({});
   const [mobileView, setMobileView] = useState<MobileBenchView>("tools");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "downloaded">("idle");
+  const [exportFeedback, setExportFeedback] = useState<ExportFeedback | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
@@ -534,6 +550,9 @@ export function App() {
     setError(null);
     setMobileView("tools");
     setActiveSource(source);
+    setTimeline([]);
+    setExportFeedback(null);
+    externalStartRef.current.clear();
     const sourceKey = source.kind === "fixture" ? source.id : source.sourceUrl;
 
     try {
@@ -923,20 +942,21 @@ export function App() {
       addTimelineEntry({
         name: tool.name,
         arguments: args,
-        result,
+        result: toContentResult(result),
         duration,
         state: result.ok ? "success" : isCancellation(result) ? "cancelled" : "error",
       });
       setPreviewHtml(serializeSanitizedDocument(sourceDocument));
       if (!result.ok) setError(result.message);
     } catch (caught) {
+      const failure = {
+        ok: false as const,
+        message: caught instanceof Error ? caught.message : "Execution failed",
+      };
       addTimelineEntry({
         name: tool.name,
         arguments: args,
-        result: {
-          ok: false,
-          message: caught instanceof Error ? caught.message : "Execution failed",
-        },
+        result: toContentResult(failure),
         duration: Math.max(0, Math.round(performance.now() - started)),
         state: isCancellation(caught) ? "cancelled" : "error",
       });
@@ -984,7 +1004,7 @@ export function App() {
       .filter((tool) => tool.status === "auto" || tool.status === "published")
       .map(({ status: _status, ...tool }) => tool);
     const source = buildAdapterModule(manifest, exported, graftRuntimeSource);
-    const fileName = `graft-${(compiledSourceKey ?? "adapter").replace(/[^a-z0-9]+/gi, "-").slice(0, 48)}.js`;
+    const fileName = adapterFileName(compiledSourceKey);
     return { source, fileName, toolCount: manifest.tools.length, eligible: exported.length };
   }, [activeSource, compiledSourceKey, snapshot, tools]);
 
@@ -996,8 +1016,15 @@ export function App() {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = built.fileName;
+    document.body.append(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    setExportFeedback({
+      kind: "prepared",
+      fileName: built.fileName,
+      eligible: built.eligible,
+    });
     return { fileName: built.fileName, toolCount: built.toolCount, eligible: built.eligible };
   }, [buildExport]);
 
@@ -1006,14 +1033,16 @@ export function App() {
     if (!built) return null;
     try {
       await navigator.clipboard.writeText(built.source);
-      setCopyState("copied");
+      setExportFeedback({
+        kind: "copied",
+        fileName: built.fileName,
+        eligible: built.eligible,
+      });
     } catch {
       // Every insecure context and some browsers refuse clipboard writes. A
       // button that silently does nothing is worse than one that falls back.
       exportAdapter();
-      setCopyState("downloaded");
     }
-    window.setTimeout(() => setCopyState("idle"), 2600);
     return built;
   }, [buildExport, exportAdapter]);
 
@@ -1049,6 +1078,7 @@ export function App() {
         : selectedFixtureId;
   const dirty = compiledSourceKey !== null && compiledSourceKey !== pendingKey;
   const connected = controlToolNames.length === CONTROL_TOOLS.length;
+  const currentAdapterFileName = adapterFileName(compiledSourceKey);
 
   return (
     <div className="app-shell">
@@ -1829,8 +1859,17 @@ export function App() {
                         <span className="timeline-status" data-state={entry.state}>
                           {entry.state === "success" ? `${entry.duration}ms` : entry.state}
                         </span>
-                        <details className="timeline-detail">
-                          <summary>Inspect exact call JSON</summary>
+                        <details
+                          className="timeline-detail"
+                          onToggle={(event) => {
+                            if (!event.currentTarget.open) return;
+                            const detail = event.currentTarget;
+                            window.requestAnimationFrame(() => {
+                              detail.scrollIntoView({ block: "nearest" });
+                            });
+                          }}
+                        >
+                          <summary>Inspect exact tool call JSON</summary>
                           <div className="timeline-json-grid">
                             <div>
                               <span className="micro-label">Arguments</span>
@@ -1950,31 +1989,54 @@ export function App() {
           <div className="page-container final-layout">
             <div className="final-copy">
               <p className="kicker">Ship from the owner site</p>
-              <h2 id="final-title">Make an existing page legible to agents.</h2>
+              <h2 id="final-title">Review once. Ship one file.</h2>
               <p>
-                Start with a controlled snapshot, review every contract and export one file. The
-                runtime ships inside it, so the reviewed tools run against your live DOM with no
-                handlers to write and no dependency on Graft.
+                The adapter carries the reviewed contracts and the runtime that executes approved
+                read tools against your live DOM. Held writes stay out until you bind an owner
+                handler, so the compiler never invents permission.
               </p>
+              <ol className="install-steps" aria-label="Install a Graft adapter">
+                <li>
+                  <span>01</span>
+                  <div>
+                    <strong>Download</strong>
+                    <p>Export {currentAdapterFileName} with the contracts you approved.</p>
+                  </div>
+                </li>
+                <li>
+                  <span>02</span>
+                  <div>
+                    <strong>Install</strong>
+                    <p>Place the file beside your page, then register it from one module script.</p>
+                  </div>
+                </li>
+                <li>
+                  <span>03</span>
+                  <div>
+                    <strong>Deploy and verify</strong>
+                    <p>Open the deployed URL in Graft to catch missing tools or contract drift.</p>
+                  </div>
+                </li>
+              </ol>
               <pre className="final-snippet">
 {`<script type="module">
-  import { registerGraftTools } from "./graft-adapter.js";
+  import { registerGraftTools } from "./${currentAdapterFileName}";
   await registerGraftTools();
 </script>`}
               </pre>
             </div>
             <div className="final-actions">
-              <a className="final-action" href="#compiler-bench">
-                <span>Open the compiler</span>
-                <ArrowRight size={20} weight="bold" aria-hidden="true" />
-              </a>
               <button
                 type="button"
                 className="final-action"
                 disabled={tools.length === 0}
                 onClick={exportAdapter}
               >
-                <span>Download reviewed adapter</span>
+                <span>
+                  {exportFeedback?.kind === "prepared"
+                    ? `Prepared ${exportFeedback.fileName}`
+                    : "Download reviewed adapter"}
+                </span>
                 <DownloadSimple size={20} weight="bold" aria-hidden="true" />
               </button>
               <button
@@ -1984,14 +2046,34 @@ export function App() {
                 onClick={() => void copyAdapter()}
               >
                 <span>
-                  {copyState === "copied"
-                    ? "Copied to clipboard"
-                    : copyState === "downloaded"
-                      ? "Clipboard blocked, downloaded instead"
-                      : "Copy adapter source"}
+                  {exportFeedback?.kind === "copied"
+                    ? "Copied adapter source"
+                    : "Copy adapter source"}
                 </span>
                 <ArrowRight size={20} weight="bold" aria-hidden="true" />
               </button>
+              <a
+                className="final-action"
+                href="https://graft-owner-example.vercel.app/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>Open live owner implementation</span>
+                <ArrowRight size={20} weight="bold" aria-hidden="true" />
+              </a>
+              {exportFeedback && (
+                <div className="export-receipt" role="status" aria-live="polite">
+                  <Check size={18} weight="bold" aria-hidden="true" />
+                  <div>
+                    <strong>
+                      {exportFeedback.kind === "copied" ? "Source copied" : "Adapter prepared"}
+                    </strong>
+                    <span>
+                      {exportFeedback.eligible} approved tools in {exportFeedback.fileName}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>

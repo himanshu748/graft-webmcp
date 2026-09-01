@@ -317,7 +317,41 @@ describe("WebMCP registry", () => {
           name: "list_products",
           args: { offset: 0, limit: 1 },
           status: "success",
-          result: expect.objectContaining({ ok: true }),
+          result: execution,
+        }),
+      ]),
+    );
+
+    const failedExecution = await descriptor?.execute({ offset: 0, limit: 0 });
+    expect(failedExecution?.isError).toBe(true);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "execution_finished",
+          name: "list_products",
+          args: { offset: 0, limit: 0 },
+          status: "error",
+          result: failedExecution,
+        }),
+      ]),
+    );
+
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const cancelledExecution = await descriptor?.execute(
+      { offset: 0, limit: 1 },
+      { signal: cancellation.signal },
+    );
+    expect(cancelledExecution?.isError).toBe(true);
+    expect(cancelledExecution?.content?.[0]?.text).toMatch(/cancelled/i);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "execution_finished",
+          name: "list_products",
+          args: { offset: 0, limit: 1 },
+          status: "cancelled",
+          result: cancelledExecution,
         }),
       ]),
     );

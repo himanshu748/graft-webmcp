@@ -105,7 +105,7 @@ graft_compile_url(python.org) -> 10 candidates, 10 registered
 graft_inspect_candidate   -> schema, annotations and the four scored reasons
 search_this_site(q=asyncio)   -> 20 results from python.org/search/?q=asyncio
 list_latest_news(limit=3) -> 3 of 5 rows, with pagination guidance
-graft_export_adapter      -> graft-https-www-python-org-.js, 10 of 10 eligible
+graft_export_adapter      -> graft-https-www-python-org.js, 10 of 10 eligible
 ```
 
 The verifier reports what it can prove and nothing more. A check the browser cannot answer is marked inconclusive rather than failed, and a schema that a listing does not expose is never asserted to be missing. Chrome 149 lists tools without some fields that Chrome 152 exposes, so the same site can be fully checkable in one build and only partly checkable in another. Saying so is the difference between a verifier and a guess.
@@ -114,29 +114,23 @@ Two implementation notes worth knowing if you build against this API. Chrome tak
 
 ## Verified export loop
 
-A green `graft_export_adapter` only proves the click happened. `node scripts/smoke-export.mjs [graft-url] [target-url]` proves the file works: it compiles a page, exports the adapter, checks a file actually landed on disk, then serves that untouched file from a throwaway origin that knows nothing about Graft, registers every exported tool with no owner handlers, then proves an owner override still wins. Set `GRAFT_CHROME_PATH` if Chrome is not where the script looks. Recorded run, 2026-08-28:
+A green `graft_export_adapter` only proves the click happened. `node scripts/smoke-export.mjs [graft-url] [target-url]` proves the file works: it compiles a page, exports the adapter, checks a file actually landed on disk, then serves that untouched file from a throwaway origin that knows nothing about Graft, registers every exported read tool with no owner handlers, then proves an owner override still wins. Set `GRAFT_CHROME_PATH` if Chrome is not where the script looks. Fresh owner-site run, 2026-09-01:
 
 ```
-graft_compile_url(python.org) -> 10 candidates, 10 auto
-graft_export_adapter          -> graft-https-www-python-org-.js, 10 of 10 eligible
-downloaded                    -> one file, 10 descriptors parsed back out
-registerGraftTools            -> 5 registered, 5 reported as missingHandlers, 0 failures
-Chrome getTools()             -> exactly the 5 bound tools, on an origin Graft does not serve
-executeTool(list_navigation)  -> owner handler received {"offset":0,"limit":15}
+graft_compile_url(owner site) -> 7 candidates (5 auto, 1 rejected, 1 held)
+graft_export_adapter          -> 5 of 7 eligible
+downloaded                    -> one self-contained file, 5 contracts parsed back out
+registerGraftTools            -> 5 registered, 0 missing handlers, 0 failures
+Chrome getTools()             -> exactly those 5 tools on an origin Graft does not serve
+owner override                -> received the declared search arguments unchanged
 ```
 
-The last two lines are the ones that matter. Chrome's own registry lists the tools, and the arguments the exported schema declares arrive at the owner's handler unchanged. Tools left unbound are reported rather than registered as broken stubs. The script exits non-zero when any check fails, including against a page that registers no Graft tools at all.
+The last two lines are the ones that matter. Chrome's own registry lists every approved read tool without owner code, and the arguments the exported schema declares still arrive unchanged when an owner overrides a generated handler. Held writes are not in `graftTools`, so they never register as broken or invented stubs. The script exits non-zero when any check fails, including against a page that registers no Graft tools at all.
 
-Pointing the same script at the owner site closes the circle, because Graft then reads a page that is already running an adapter Graft generated. Recorded run, 2026-08-28:
+The command for that proof is:
 
 ```
 node scripts/smoke-export.mjs https://graft-webmcp.vercel.app/ https://graft-owner-example.vercel.app/
-
-graft_compile_url(owner site) -> 7 candidates (5 auto, 1 rejected, 1 held)
-graft_export_adapter          -> 5 of 7 eligible
-registerGraftTools            -> 3 registered, 2 reported as missingHandlers, 0 failures
-Chrome getTools()             -> get_page_outline, get_page_summary, search_catalog
-executeTool(search_catalog)   -> owner handler received {"category":"all","in_stock":false}
 ```
 
 The gap between the 7 candidates found and the 5 exported is the review layer, not a shortfall:
@@ -151,7 +145,7 @@ list_device_controls  rejected   35  R3  read-only
 add_to_demo_cart      held       55  R7  write
 ```
 
-`add_to_demo_cart` mutates the page, so it is held rather than published and is excluded from the descriptors, shipping in the manifest as reviewed metadata. Graft does not hand an agent a write tool on a confidence score of 55. `list_device_controls` is a false positive Graft found in its own example's markup and rejected. The deployed owner site still ends up with 6 live tools, because `owner.js` reads the held candidate back out of `graftManifest`, ships its reviewed name, description, schema and annotations verbatim rather than re-declaring them, and binds a real handler to it. Graft proposes, a person ships. That promotion is a decision the export deliberately refuses to make on the owner's behalf.
+`add_to_demo_cart` mutates the page, so it is held rather than published and is excluded from `graftTools`, shipping in `graftManifest` as reviewed metadata. Graft does not hand an agent a write tool on a confidence score of 55. `list_device_controls` is a false positive Graft found in its own example's markup and rejected. The deployed owner site still ends up with 6 live tools, because `owner.js` reads the held candidate back out of `graftManifest`, ships its reviewed name, description, schema and annotations verbatim rather than re-declaring them, and binds a real handler to it. Graft proposes, a person ships. That promotion is a decision the export deliberately refuses to make on the owner's behalf.
 
 `node scripts/smoke-owner-site.mjs` covers the other direction, executing all 6 live tools with arguments built from each tool's own declared schema. Recorded run, 2026-08-28, 6 of 6 passing:
 

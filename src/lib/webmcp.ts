@@ -295,15 +295,16 @@ export class WebMCPRegistry {
             this.idleResolvers.clear();
           }
         }
+        const wireResult = toContentResult(result);
         this.options.onEvent?.({
           type: "execution_finished",
           name: tool.name,
           args: eventArgs,
-          result,
+          result: wireResult,
           status,
           durationMs: Math.max(0, Date.now() - startedAt),
         });
-        return toContentResult(result);
+        return wireResult;
       },
     };
   }
