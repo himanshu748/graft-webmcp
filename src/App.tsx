@@ -239,7 +239,7 @@ function controlRegistrationLabel(
   report: ToolRegistrationReport,
   controlCount: number,
 ): string {
-  if (controlCount > 0) return `${controlCount} Graft tools live`;
+  if (controlCount > 0) return `${controlCount} WebMCP tools live`;
   if (!report.available) return "WebMCP not detected";
   return "Graft tools pending";
 }
@@ -1075,7 +1075,9 @@ export function App() {
           {registration.available ? (
             <div className="connection-state" data-connected={connected} aria-live="polite">
               <span className="connection-light" aria-hidden="true" />
-              <span>{controlRegistrationLabel(registration, controlToolNames.length)}</span>
+              <span className="connection-label">
+                {controlRegistrationLabel(registration, controlToolNames.length)}
+              </span>
             </div>
           ) : (
             /* A bare "not detected" badge reads as a broken demo. It is the one
@@ -1083,8 +1085,13 @@ export function App() {
             <details className="connection-help">
               <summary className="connection-state" data-connected={false}>
                 <span className="connection-light" aria-hidden="true" />
-                <span>WebMCP not detected</span>
-                <span className="connection-more">What this means</span>
+                <span className="connection-label">WebMCP not detected</span>
+                <span className="connection-more">
+                  <span className="connection-more-long">What this means</span>
+                  <span className="connection-more-short" aria-hidden="true">
+                    Why
+                  </span>
+                </span>
               </summary>
               <div className="connection-panel">
                 <p>
