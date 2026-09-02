@@ -314,6 +314,13 @@ export class WebMCPRegistry {
     signal: AbortSignal,
   ): Promise<void> {
     if (!this.modelContext) return;
+    const documentContext =
+      typeof document === "undefined" ? undefined : (document as GraftDocument).modelContext;
+    if (documentContext && documentContext === this.modelContext) {
+      // Typed equivalent of the native document.modelContext.registerTool({...}) call.
+      await documentContext.registerTool(descriptor, { signal });
+      return;
+    }
     await this.modelContext.registerTool(descriptor, { signal });
   }
 

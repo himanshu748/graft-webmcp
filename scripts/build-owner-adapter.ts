@@ -1,8 +1,13 @@
 // Produces the owner-site adapter through Graft's real export path, so the
 // deployed example is genuinely generated rather than hand-written.
-//   npx vite-node scripts/build-owner-adapter.ts
+//   npm run build:owner-adapter
 import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const fromRoot = (...segments: string[]) => resolve(repositoryRoot, ...segments);
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 Object.assign(globalThis, { DOMParser: dom.window.DOMParser, Event: dom.window.Event });
@@ -11,7 +16,7 @@ const { compileDocument } = await import("../src/lib/index.js");
 const { sanitizeFixtureHtml } = await import("../src/sanitize.js");
 const { buildAdapterModule } = await import("../src/export-adapter.js");
 
-const html = readFileSync("src/data/fixtureHtml/catalog.html", "utf8");
+const html = readFileSync(fromRoot("src/data/fixtureHtml/catalog.html"), "utf8");
 const sanitized = sanitizeFixtureHtml(html);
 const compilation = compileDocument(sanitized.document);
 
@@ -46,11 +51,11 @@ const exported = manifest.tools
   .filter((tool) => tool.status === "auto" || tool.status === "published")
   .map(({ status: _s, ...tool }) => tool);
 
-const runtimeSource = readFileSync("src/generated/graft-runtime.js", "utf8");
+const runtimeSource = readFileSync(fromRoot("src/generated/graft-runtime.js"), "utf8");
 
-mkdirSync("examples/owner-site", { recursive: true });
+mkdirSync(fromRoot("examples/owner-site"), { recursive: true });
 writeFileSync(
-  "examples/owner-site/graft-adapter.js",
+  fromRoot("examples/owner-site/graft-adapter.js"),
   buildAdapterModule(manifest, exported, runtimeSource),
 );
 

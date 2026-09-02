@@ -186,7 +186,7 @@ export async function registerControlPlane(
   await register({
     name: "graft_set_candidate",
     description:
-      "Publish a held candidate so it registers with the browser, or hold a registered one so it stops being offered. This is the human review gate, so it asks for confirmation before it changes anything. Rejected candidates cannot be published.",
+      "Publish a held candidate so it registers with the browser, or hold a registered one so it stops being offered. Calling this changes Graft's local review state immediately; it does not prompt for confirmation. Rejected candidates cannot be published.",
     inputSchema: {
       type: "object",
       properties: {

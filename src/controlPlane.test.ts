@@ -95,9 +95,11 @@ describe("control plane registration", () => {
   });
 
   it("passes an expect list through to the verifier as names", async () => {
-    const verifyUrl = vi.fn(async () => "ok");
+    const verifyUrl = vi.fn(
+      async () => "Verdict: pass (5/5 decisive checks, 0 inconclusive)\nExact match: yes",
+    );
     const { descriptors } = await setup({ verifyUrl });
-    await descriptors.get("graft_verify_url").execute({
+    const result = await descriptors.get("graft_verify_url").execute({
       url: "https://shop.example.com",
       expect: "list_products, get_product ,",
     });
@@ -106,6 +108,8 @@ describe("control plane registration", () => {
       "list_products",
       "get_product",
     ]);
+    expect(result.content[0].text).toContain("Verdict: pass (5/5 decisive checks");
+    expect(result.content[0].text).toContain("Exact match: yes");
   });
 });
 
@@ -115,6 +119,27 @@ describe("control plane behaviour", () => {
     const result = await descriptors.get("graft_status").execute({});
     expect(result.content[0].text).toContain("books.toscrape.com");
     expect(result.content[0].text).toContain("Registered natively: 1");
+  });
+
+  it("compiles the requested URL and returns the resulting candidates", async () => {
+    const compiled: ControlPlaneSnapshot = {
+      ...snapshot,
+      sourceUrl: "https://www.python.org/",
+      tools: [tool("search_this_site", "auto", 86)],
+      registeredCount: 1,
+    };
+    const compileUrl = vi.fn(async () => compiled);
+    const { descriptors } = await setup({ compileUrl });
+
+    const result = await descriptors.get("graft_compile_url").execute({
+      url: "  https://www.python.org/  ",
+    });
+
+    expect(compileUrl).toHaveBeenCalledWith("https://www.python.org/");
+    expect(result.content[0].text).toContain("Compiled source: https://www.python.org/");
+    expect(result.content[0].text).toContain(
+      "search_this_site | auto | confidence 86 | R3 | read-only",
+    );
   });
 
   it("filters candidates by status", async () => {
@@ -141,6 +166,42 @@ describe("control plane behaviour", () => {
       status: "published",
     });
     expect(result.content[0].text).toContain("cannot be published");
+  });
+
+  it("changes a candidate status and reports the live registration count", async () => {
+    const published: ControlPlaneSnapshot = {
+      ...snapshot,
+      tools: [tool("list_products", "auto", 75), tool("add_to_basket", "published", 55)],
+      registeredCount: 2,
+    };
+    const setCandidateStatus = vi.fn(async () => published);
+    const { descriptors } = await setup({ setCandidateStatus });
+
+    const result = await descriptors.get("graft_set_candidate").execute({
+      name: "add_to_basket",
+      status: "published",
+    });
+
+    expect(setCandidateStatus).toHaveBeenCalledWith("add_to_basket", "published");
+    expect(result.content[0].text).toBe(
+      "add_to_basket is now published. 2 tools registered natively.",
+    );
+  });
+
+  it("exports the reviewed adapter and reports its eligibility totals", async () => {
+    const { descriptors } = await setup({
+      exportAdapter: () => ({
+        fileName: "graft-books.adapter.js",
+        toolCount: 5,
+        eligible: 3,
+      }),
+    });
+
+    const result = await descriptors.get("graft_export_adapter").execute({});
+
+    expect(result.content[0].text).toBe(
+      "Exported graft-books.adapter.js. 3 of 5 candidates are eligible to register; the rest are held or rejected and are included as reviewed metadata only.",
+    );
   });
 
   it("never exceeds the tool output budget", async () => {

@@ -563,6 +563,28 @@ describe("tool argument validation", () => {
 });
 
 describe("WebMCP registry", () => {
+  it("prefers the document producer surface over the navigator fallback", async () => {
+    const root = fixtureDocument(catalogHtml, "/fixtures/catalog.html");
+    const summary = deriveTools(root).find(
+      (candidate) => candidate.name === "get_page_summary",
+    ) as GraftTool;
+    const documentContext = new FakeModelContext();
+    const navigatorContext = new FakeModelContext();
+    vi.stubGlobal("document", { modelContext: documentContext });
+    vi.stubGlobal("navigator", { modelContext: navigatorContext });
+
+    try {
+      const registry = new WebMCPRegistry({ root });
+      await registry.register([summary]);
+      expect(documentContext.registerTool).toHaveBeenCalledOnce();
+      expect(documentContext.descriptors.has("get_page_summary")).toBe(true);
+      expect(navigatorContext.registerTool).not.toHaveBeenCalled();
+      await registry.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("registers approved tools with safety annotations and aborts replaced registrations", async () => {
     const document = fixtureDocument(catalogHtml, "/fixtures/catalog.html");
     const tools = deriveTools(document);
