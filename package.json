@@ -7,8 +7,8 @@
     "dev": "npm run build:runtime && vite",
     "build": "npm run build:runtime && tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "npm run build:runtime && vitest run",
+    "test:watch": "npm run build:runtime && vitest",
     "build:runtime": "vite build --config vite.runtime.config.ts"
   },
   "dependencies": {
