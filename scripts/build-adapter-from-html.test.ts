@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -106,6 +107,12 @@ describe("HTML adapter review overlay", { timeout: CLI_TEST_TIMEOUT_MS }, () => 
       sha256: createHash("sha256").update(run.reviewSource as string).digest("hex"),
       decisions: [{ name: "add_to_demo_cart", status: "published" }],
     });
+    expect(adapter.graftManifest.provenance.generatorSourcesSha256).toMatch(/^[a-f0-9]{64}$/);
+    const adapterSource = readFileSync(run.outputPath, "utf8");
+    const checksumSource = readFileSync(`${run.outputPath}.sha256`, "utf8");
+    expect(checksumSource).toBe(
+      `${createHash("sha256").update(adapterSource).digest("hex")}  ${basename(run.outputPath)}\n`,
+    );
   });
 
   it("leaves held candidates and provenance unchanged without a review file", async () => {

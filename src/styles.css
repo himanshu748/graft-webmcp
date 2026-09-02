@@ -1643,6 +1643,489 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.verification-panel {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+  margin-top: clamp(1rem, 2.5vw, 2rem);
+  scroll-margin-top: 5.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+  background: var(--card);
+}
+
+.verification-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: clamp(2rem, 4vw, 4rem);
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  border-right: 1px solid var(--border);
+}
+
+.verification-intro h2 {
+  max-width: 12ch;
+  margin: 0;
+  font-size: clamp(2rem, 3.2vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.verification-intro > p:last-child {
+  max-width: 54ch;
+  margin: 1rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.verification-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.verification-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+.verification-field > span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.verification-field em {
+  margin-left: 0.25rem;
+  color: var(--muted-foreground);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.verification-field input,
+.verification-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.verification-field input {
+  min-height: 48px;
+}
+
+.verification-field textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.verification-field input::placeholder,
+.verification-field textarea::placeholder {
+  color: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
+}
+
+.verification-help {
+  margin: -0.25rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.verification-submit {
+  display: inline-flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.verification-output {
+  min-width: 0;
+  min-height: 620px;
+  background: var(--background);
+}
+
+.verification-empty,
+.verification-error {
+  display: grid;
+  min-height: 620px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  align-content: center;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.verification-empty > svg,
+.verification-empty > .compile-pulse {
+  margin-top: 0.1rem;
+  color: var(--primary);
+}
+
+.verification-empty strong,
+.verification-error strong {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.verification-empty p,
+.verification-error p {
+  max-width: 48ch;
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.verification-error {
+  color: var(--destructive);
+}
+
+.verification-error p {
+  color: var(--muted-foreground);
+}
+
+.verification-report {
+  min-width: 0;
+}
+
+.verification-report-head {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.verification-verdict {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--success);
+}
+
+.verification-report[data-verdict="fail"] .verification-verdict {
+  color: var(--destructive);
+}
+
+.verification-verdict span,
+.verification-verdict strong,
+.verification-score span,
+.verification-score small {
+  display: block;
+}
+
+.verification-verdict span,
+.verification-score span,
+.verification-score small {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.verification-verdict strong {
+  margin-top: 0.1rem;
+  color: currentColor;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.verification-score {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.verification-score strong {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.verification-score small {
+  margin-top: 0.2rem;
+  color: var(--warning);
+}
+
+.verification-target {
+  display: flex;
+  min-height: 46px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.verification-target svg {
+  flex: 0 0 auto;
+}
+
+.verification-target span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verification-block {
+  min-width: 0;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.verification-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.verification-block-head h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.verification-block-head span {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.verification-checks {
+  display: grid;
+}
+
+.verification-check {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.verification-check:first-child {
+  border-top-color: var(--border-strong);
+}
+
+.verification-check-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--success) 45%, var(--border));
+  border-radius: 50%;
+  color: var(--success);
+}
+
+.verification-check[data-state="fail"] .verification-check-icon {
+  border-color: color-mix(in oklch, var(--destructive) 45%, var(--border));
+  color: var(--destructive);
+}
+
+.verification-check[data-state="inconclusive"] .verification-check-icon {
+  border-color: color-mix(in oklch, var(--warning) 45%, var(--border));
+  color: var(--warning);
+}
+
+.verification-check strong {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.verification-check p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.verification-check-state {
+  padding-top: 0.15rem;
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.verification-check[data-state="fail"] .verification-check-state {
+  color: var(--destructive);
+}
+
+.verification-check[data-state="inconclusive"] .verification-check-state {
+  color: var(--warning);
+}
+
+.verification-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+
+.verification-evidence-grid .verification-block {
+  border-bottom: 0;
+}
+
+.verification-evidence-grid .verification-block + .verification-block {
+  border-left: 1px solid var(--border);
+}
+
+.verification-tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verification-tool-list code,
+.verification-findings code {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.verification-tool-list code {
+  display: inline-block;
+  padding: 0.32rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+
+.verification-block-empty {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.verification-drift {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.verification-drift > div {
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--warning);
+}
+
+.verification-drift-missing {
+  border-left-color: var(--destructive);
+}
+
+.verification-drift strong {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.verification-drift p {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.verification-drift-exact {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--success);
+  font-family: var(--font-sans) !important;
+}
+
+.verification-findings {
+  display: grid;
+}
+
+.verification-findings > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 0.65fr);
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.verification-findings > div:first-child {
+  border-top-color: var(--border-strong);
+}
+
+.verification-findings code {
+  color: var(--warning);
+  overflow-wrap: anywhere;
+}
+
+.verification-findings ul {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.verification-environment {
+  padding: 0.75rem 1.5rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.verification-environment summary {
+  width: fit-content;
+  min-height: 40px;
+  cursor: pointer;
+  line-height: 40px;
+}
+
+.verification-environment p {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .site-footer {
   border-top: 1px solid var(--border);
 }
@@ -1742,6 +2225,11 @@ button:disabled {
     transition: background-color 100ms cubic-bezier(0, 0, 0.2, 1), border-color 100ms cubic-bezier(0, 0, 0.2, 1), color 100ms cubic-bezier(0, 0, 0.2, 1), transform 100ms cubic-bezier(0, 0, 0.2, 1);
   }
 
+  .verification-submit,
+  .verification-target {
+    transition: background-color 100ms cubic-bezier(0, 0, 0.2, 1), border-color 100ms cubic-bezier(0, 0, 0.2, 1), color 100ms cubic-bezier(0, 0, 0.2, 1), transform 100ms cubic-bezier(0, 0, 0.2, 1);
+  }
+
   .primary-nav a:hover,
   .secondary-cta:hover,
   .contract-edit-trigger:hover,
@@ -1767,6 +2255,15 @@ button:disabled {
   .tool-row:hover {
     background: var(--accent);
   }
+
+  .verification-submit:hover {
+    background: color-mix(in oklch, var(--primary) 88%, white);
+  }
+
+  .verification-target:hover {
+    background: var(--accent);
+    color: var(--foreground);
+  }
 }
 
 .primary-cta:active,
@@ -1781,6 +2278,11 @@ button:disabled {
 .ghost-button:active,
 .dialog-actions button:active,
 .contract-edit-actions button:active {
+  transform: translateY(1px);
+}
+
+.verification-submit:active,
+.verification-target:active {
   transform: translateY(1px);
 }
 
@@ -1837,6 +2339,25 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .verification-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verification-control {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .verification-intro h2 {
+    max-width: 16ch;
+  }
+
+  .verification-output,
+  .verification-empty,
+  .verification-error {
+    min-height: 360px;
+  }
+
   .section-description {
     max-width: 65ch;
   }
@@ -1878,6 +2399,15 @@ button:disabled {
   .final-actions {
     width: 100%;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .verification-evidence-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verification-evidence-grid .verification-block + .verification-block {
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 }
 
@@ -2154,6 +2684,32 @@ button:disabled {
 
   .final-layout {
     padding: 1.25rem;
+  }
+
+  .verification-control,
+  .verification-report-head,
+  .verification-target,
+  .verification-block,
+  .verification-environment {
+    padding-inline: 1rem;
+  }
+
+  .verification-report-head {
+    align-items: flex-start;
+  }
+
+  .verification-check {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .verification-check-state {
+    grid-column: 2;
+    padding-top: 0;
+  }
+
+  .verification-findings > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
   }
 
   .footer-inner {

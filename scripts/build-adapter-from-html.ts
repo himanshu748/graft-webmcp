@@ -44,6 +44,40 @@ const { buildAdapterModule } = await import("../src/export-adapter.js");
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
+function hashGeneratorSources(): string {
+  const paths = execFileSync(
+    "git",
+    [
+      "ls-files",
+      "-z",
+      "--",
+      "src",
+      "scripts/build-adapter-from-html.ts",
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json",
+      "tsconfig.app.json",
+      "tsconfig.node.json",
+      "vite.config.ts",
+      "vite.runtime.config.ts",
+    ],
+    { encoding: "utf8" },
+  )
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  if (paths.length === 0) throw new Error("No tracked Graft generator sources were found.");
+
+  const digest = createHash("sha256");
+  for (const path of paths) {
+    digest.update(path);
+    digest.update("\0");
+    digest.update(readFileSync(resolve(path)));
+    digest.update("\0");
+  }
+  return digest.digest("hex");
+}
+
 interface ReviewDecision {
   name: string;
   status: "published";
@@ -269,6 +303,7 @@ const reviewedCompilationTools = review
   : compilation.tools;
 const runtimeSource = readFileSync("src/generated/graft-runtime.js", "utf8");
 const exportedRuntimeSource = runtimeSource.trim();
+const generatorSourcesSha256 = hashGeneratorSources();
 const graftRevision = execFileSync("git", ["describe", "--always", "--dirty"], {
   encoding: "utf8",
 }).trim();
@@ -295,6 +330,7 @@ const provenance = {
   sourceHtmlSha256: sha256(html),
   sanitizedSnapshotFingerprint: snapshotFingerprint(compilation.snapshot),
   runtimeSha256: sha256(exportedRuntimeSource),
+  generatorSourcesSha256,
   reviewedToolSetFingerprint: toolSetFingerprint(reviewedCompilationTools),
   exportedToolsSha256: sha256(JSON.stringify(exported)),
   ...(review
@@ -325,7 +361,11 @@ const manifest = {
 };
 
 mkdirSync(dirname(outputPath), { recursive: true });
-writeFileSync(outputPath, buildAdapterModule(manifest, exported, runtimeSource));
+const adapterSource = buildAdapterModule(manifest, exported, runtimeSource);
+const adapterSha256 = sha256(adapterSource);
+const checksumPath = `${outputPath}.sha256`;
+writeFileSync(outputPath, adapterSource);
+writeFileSync(checksumPath, `${adapterSha256}  ${basename(outputPath)}\n`);
 
 console.log(`compiled ${compilation.tools.length} candidates from ${htmlPath}`);
 for (const tool of reviewedCompilationTools) {
@@ -334,4 +374,7 @@ for (const tool of reviewedCompilationTools) {
 console.log(`exported ${exported.length} tools to ${outputPath}`);
 console.log(`source sha256 ${provenance.sourceHtmlSha256}`);
 console.log(`runtime sha256 ${provenance.runtimeSha256}`);
+console.log(`generator sources sha256 ${provenance.generatorSourcesSha256}`);
+console.log(`adapter sha256 ${adapterSha256}`);
+console.log(`checksum ${checksumPath}`);
 if (review) console.log(`review sha256 ${review.sha256}`);

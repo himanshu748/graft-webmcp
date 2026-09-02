@@ -90,6 +90,47 @@ interface ExportFeedback {
   eligible: number;
 }
 
+interface VerificationCheck {
+  id: string;
+  label: string;
+  pass: boolean;
+  inconclusive?: boolean;
+  detail: string;
+}
+
+interface VerificationFinding {
+  name: string;
+  issues: string[];
+}
+
+interface VerificationDrift {
+  missing: string[];
+  added: string[];
+  exact: boolean;
+}
+
+interface VerificationReport {
+  ok: true;
+  url: string;
+  verdict: "pass" | "pass with gaps" | "fail";
+  skipped: number;
+  passed: number;
+  total: number;
+  checks: VerificationCheck[];
+  tools: string[];
+  schemasVisible: number;
+  findings: VerificationFinding[];
+  drift: VerificationDrift | null;
+  userAgent: string;
+}
+
+interface VerificationFailure {
+  message: string;
+  detail?: string;
+}
+
+type VerificationStatus = "idle" | "loading" | "complete" | "error";
+
 interface PendingConfirmation {
   toolName: string;
   args: Record<string, unknown>;
@@ -445,6 +486,14 @@ export function App() {
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [draftToolName, setDraftToolName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [verificationUrl, setVerificationUrl] = useState("");
+  const [verificationExpected, setVerificationExpected] = useState("");
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>("idle");
+  const [verificationReport, setVerificationReport] =
+    useState<VerificationReport | null>(null);
+  const [verificationFailure, setVerificationFailure] =
+    useState<VerificationFailure | null>(null);
 
   const controlStateRef = useRef<ControlPlaneSnapshot>({
     sourceUrl: "",
@@ -464,6 +513,7 @@ export function App() {
   const compileTokenRef = useRef(0);
   const externalStartRef = useRef(new Map<string, number>());
   const pendingConfirmationRef = useRef<PendingConfirmation | null>(null);
+  const verificationRequestRef = useRef<AbortController | null>(null);
 
   const selectedFixture = getFixture(selectedFixtureId);
   const selectedTool =
@@ -795,6 +845,7 @@ export function App() {
       compileTokenRef.current += 1;
       void registryRef.current?.dispose();
       pendingConfirmationRef.current?.resolve(false);
+      verificationRequestRef.current?.abort();
     };
   }, []);
 
@@ -1046,6 +1097,85 @@ export function App() {
     return built;
   }, [buildExport, exportAdapter]);
 
+  const verifyDeployment = useCallback(async () => {
+    const target = verificationUrl.trim();
+    if (!target) {
+      setVerificationStatus("error");
+      setVerificationReport(null);
+      setVerificationFailure({
+        message: "Enter a deployed URL to verify.",
+        detail: "Graft can only inspect a public page that its verification browser can reach.",
+      });
+      return;
+    }
+
+    verificationRequestRef.current?.abort();
+    const controller = new AbortController();
+    verificationRequestRef.current = controller;
+    setVerificationStatus("loading");
+    setVerificationReport(null);
+    setVerificationFailure(null);
+
+    const expected = verificationExpected
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const query = new URLSearchParams({ url: target });
+    if (expected.length > 0) query.set("expect", expected.join(","));
+
+    try {
+      const response = await fetch(`/api/verify?${query.toString()}`, {
+        signal: controller.signal,
+      });
+      const payload = (await response.json()) as Partial<VerificationReport> & {
+        ok?: boolean;
+        message?: string;
+        detail?: string;
+      };
+
+      if (!response.ok || payload.ok !== true) {
+        setVerificationStatus("error");
+        setVerificationFailure({
+          message:
+            typeof payload.message === "string"
+              ? payload.message
+              : `Verification failed with HTTP ${response.status}.`,
+          detail: typeof payload.detail === "string" ? payload.detail : undefined,
+        });
+        return;
+      }
+
+      if (
+        typeof payload.url !== "string" ||
+        typeof payload.verdict !== "string" ||
+        !Array.isArray(payload.checks) ||
+        !Array.isArray(payload.tools) ||
+        !Array.isArray(payload.findings)
+      ) {
+        setVerificationStatus("error");
+        setVerificationFailure({
+          message: "The verifier returned an unreadable response.",
+          detail: "Try again. If it repeats, inspect the deployment function logs.",
+        });
+        return;
+      }
+
+      setVerificationReport(payload as VerificationReport);
+      setVerificationStatus("complete");
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      setVerificationStatus("error");
+      setVerificationFailure({
+        message: "Graft could not complete the verification request.",
+        detail: caught instanceof Error ? caught.message : undefined,
+      });
+    } finally {
+      if (verificationRequestRef.current === controller) {
+        verificationRequestRef.current = null;
+      }
+    }
+  }, [verificationExpected, verificationUrl]);
+
   controlStateRef.current = {
     sourceUrl: activeSource?.sourceUrl ?? "",
     sourceKind: activeSource?.kind ?? "none",
@@ -1101,6 +1231,7 @@ export function App() {
             <a href="#compiler-bench">Compiler</a>
             <a href="#method">Method</a>
             <a href="#trust-title">Trust</a>
+            <a href="#verify-deployment">Verifier</a>
           </nav>
           {registration.available ? (
             <div className="connection-state" data-connected={connected} aria-live="polite">
@@ -2076,6 +2207,271 @@ export function App() {
               )}
             </div>
           </div>
+
+          <section
+            className="page-container verification-panel"
+            id="verify-deployment"
+            aria-labelledby="verification-title"
+          >
+            <div className="verification-control">
+              <div className="verification-intro">
+                <p className="kicker">Live deployment audit</p>
+                <h2 id="verification-title">Verify what actually shipped.</h2>
+                <p>
+                  Graft opens the public page in its WebMCP-capable browser and reports the native
+                  tool registry. Add the reviewed names to detect missing or unexpected tools.
+                </p>
+              </div>
+
+              <form
+                className="verification-form"
+                aria-labelledby="verification-title"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void verifyDeployment();
+                }}
+              >
+                <label className="verification-field" htmlFor="verification-url">
+                  <span>Deployed URL</span>
+                  <input
+                    id="verification-url"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    spellCheck={false}
+                    value={verificationUrl}
+                    onChange={(event) => setVerificationUrl(event.target.value)}
+                    placeholder="https://your-site.example"
+                    disabled={verificationStatus === "loading"}
+                    required
+                  />
+                </label>
+                <label className="verification-field" htmlFor="verification-expected">
+                  <span>Expected tool names <em>optional</em></span>
+                  <textarea
+                    id="verification-expected"
+                    rows={3}
+                    spellCheck={false}
+                    value={verificationExpected}
+                    onChange={(event) => setVerificationExpected(event.target.value)}
+                    placeholder="search_catalog, get_product, update_cart"
+                    disabled={verificationStatus === "loading"}
+                  />
+                </label>
+                <p className="verification-help">
+                  Separate exact tool names with commas. Graft sends them to the verifier without
+                  renaming or reordering them.
+                </p>
+                <button
+                  type="submit"
+                  className="verification-submit"
+                  disabled={verificationStatus === "loading"}
+                >
+                  {verificationStatus === "loading" ? (
+                    <>
+                      <span className="compile-pulse" aria-hidden="true" />
+                      Reading live registry
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={20} weight="bold" aria-hidden="true" />
+                      Verify deployed site
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            <div
+              className="verification-output"
+              aria-live="polite"
+              aria-busy={verificationStatus === "loading"}
+            >
+              {verificationStatus === "idle" && (
+                <div className="verification-empty">
+                  <Lightning size={24} weight="fill" aria-hidden="true" />
+                  <div>
+                    <strong>No deployment checked yet</strong>
+                    <p>Enter a public URL to read its live WebMCP surface.</p>
+                  </div>
+                </div>
+              )}
+
+              {verificationStatus === "loading" && (
+                <div className="verification-empty verification-loading" role="status">
+                  <span className="compile-pulse" aria-hidden="true" />
+                  <div>
+                    <strong>Opening the deployed page</strong>
+                    <p>The browser is waiting for the page to register its native tools.</p>
+                  </div>
+                </div>
+              )}
+
+              {verificationStatus === "error" && verificationFailure && (
+                <div className="verification-error" role="alert">
+                  <WarningCircle size={22} weight="fill" aria-hidden="true" />
+                  <div>
+                    <strong>{verificationFailure.message}</strong>
+                    {verificationFailure.detail && <p>{verificationFailure.detail}</p>}
+                  </div>
+                </div>
+              )}
+
+              {verificationStatus === "complete" && verificationReport && (
+                <div className="verification-report" data-verdict={verificationReport.verdict}>
+                  <header className="verification-report-head">
+                    <div className="verification-verdict">
+                      {verificationReport.verdict === "fail" ? (
+                        <X size={22} weight="bold" aria-hidden="true" />
+                      ) : (
+                        <Check size={22} weight="bold" aria-hidden="true" />
+                      )}
+                      <div>
+                        <span>Live verdict</span>
+                        <strong>{verificationReport.verdict}</strong>
+                      </div>
+                    </div>
+                    <div className="verification-score">
+                      <strong>
+                        {verificationReport.passed}/{verificationReport.total}
+                      </strong>
+                      <span>decisive checks passed</span>
+                      {verificationReport.skipped > 0 && (
+                        <small>{verificationReport.skipped} inconclusive</small>
+                      )}
+                    </div>
+                  </header>
+
+                  <a
+                    className="verification-target"
+                    href={verificationReport.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <span>{verificationReport.url}</span>
+                    <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                  </a>
+
+                  <section className="verification-block" aria-labelledby="verification-checks">
+                    <div className="verification-block-head">
+                      <h3 id="verification-checks">Checks</h3>
+                      <span>{verificationReport.checks.length} returned</span>
+                    </div>
+                    <div className="verification-checks">
+                      {verificationReport.checks.map((check) => {
+                        const state = check.inconclusive
+                          ? "inconclusive"
+                          : check.pass
+                            ? "pass"
+                            : "fail";
+                        return (
+                          <div className="verification-check" data-state={state} key={check.id}>
+                            <span className="verification-check-icon" aria-hidden="true">
+                              {state === "pass" ? (
+                                <Check size={16} weight="bold" />
+                              ) : state === "fail" ? (
+                                <X size={16} weight="bold" />
+                              ) : (
+                                <WarningCircle size={16} weight="fill" />
+                              )}
+                            </span>
+                            <div>
+                              <strong>{check.label}</strong>
+                              <p>{check.detail}</p>
+                            </div>
+                            <span className="verification-check-state">{state}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <div className="verification-evidence-grid">
+                    <section className="verification-block" aria-labelledby="verification-tools">
+                      <div className="verification-block-head">
+                        <h3 id="verification-tools">Live tools</h3>
+                        <span>{verificationReport.tools.length} registered</span>
+                      </div>
+                      {verificationReport.tools.length > 0 ? (
+                        <ul className="verification-tool-list">
+                          {verificationReport.tools.map((tool, index) => (
+                            <li key={`${tool}-${index}`}><code>{tool}</code></li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="verification-block-empty">The endpoint returned no tools.</p>
+                      )}
+                    </section>
+
+                    <section className="verification-block" aria-labelledby="verification-drift">
+                      <div className="verification-block-head">
+                        <h3 id="verification-drift">Contract drift</h3>
+                        {verificationReport.drift && (
+                          <span>{verificationReport.drift.exact ? "exact" : "changed"}</span>
+                        )}
+                      </div>
+                      {verificationReport.drift ? (
+                        <div className="verification-drift">
+                          {verificationReport.drift.exact && (
+                            <p className="verification-drift-exact">
+                              <Check size={16} weight="bold" aria-hidden="true" />
+                              Exact reviewed contract match
+                            </p>
+                          )}
+                          {verificationReport.drift.missing.length > 0 && (
+                            <div className="verification-drift-missing">
+                              <strong>Missing</strong>
+                              <p>{verificationReport.drift.missing.join(", ")}</p>
+                            </div>
+                          )}
+                          {verificationReport.drift.added.length > 0 && (
+                            <div className="verification-drift-added">
+                              <strong>Added</strong>
+                              <p>{verificationReport.drift.added.join(", ")}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="verification-block-empty">
+                          Add expected names to compare this registry with a reviewed contract.
+                        </p>
+                      )}
+                    </section>
+                  </div>
+
+                  <section className="verification-block" aria-labelledby="verification-findings">
+                    <div className="verification-block-head">
+                      <h3 id="verification-findings">Contract findings</h3>
+                      <span>{verificationReport.findings.length} tools flagged</span>
+                    </div>
+                    {verificationReport.findings.length > 0 ? (
+                      <div className="verification-findings">
+                        {verificationReport.findings.map((finding, index) => (
+                          <div key={`${finding.name}-${index}`}>
+                            <code>{finding.name}</code>
+                            <ul>
+                              {finding.issues.map((issue, issueIndex) => (
+                                <li key={`${issue}-${issueIndex}`}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="verification-block-empty">No contract findings were returned.</p>
+                    )}
+                  </section>
+
+                  <details className="verification-environment">
+                    <summary>Verification environment</summary>
+                    <p>
+                      {verificationReport.schemasVisible} schemas visible · {verificationReport.userAgent}
+                    </p>
+                  </details>
+                </div>
+              )}
+            </div>
+          </section>
         </section>
       </main>
 

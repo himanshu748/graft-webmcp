@@ -662,7 +662,7 @@ function actionCandidateTool(candidate: ActionCandidateSnapshot): GraftTool {
     {
       id: candidate.id,
       name: normalizeToolName(noun, "submit_action"),
-      description: `Perform "${candidate.label}" on this page. Graft derived this contract from ${candidate.count === 1 ? "one control" : `${candidate.count} repeated controls`} but no handler is bound, because a snapshot cannot write to a site Graft does not own. Export the manifest to implement it.`,
+      description: `Request "${candidate.label}" for one item on this page. Graft derived this consequential contract from ${candidate.count === 1 ? "one control" : `${candidate.count} repeated controls`}. The deployed owner handler must enforce approval and effects; Graft's inert preview never performs the write.`,
       inputSchema: { type: "object", properties, required, additionalProperties: false },
       recipe: "R7",
       selector: candidate.selector,

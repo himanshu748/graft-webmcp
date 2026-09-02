@@ -165,7 +165,7 @@ function validateObject(
 
   for (const [key, item] of Object.entries(value)) {
     const childPath = `${path}.${key}`;
-    const propertySchema = properties[key];
+    const propertySchema = own(properties, key) ? properties[key] : undefined;
     if (propertySchema) {
       validateValue(propertySchema, item, childPath, issues);
       continue;
