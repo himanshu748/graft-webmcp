@@ -151,6 +151,18 @@ describe("HTML adapter review overlay", { timeout: CLI_TEST_TIMEOUT_MS }, () => 
     );
   });
 
+  it("emits byte-identical adapters and detached checksums from the same inputs", () => {
+    const first = runCli();
+    const second = runCli();
+
+    expect(first.status, first.stderr).toBe(0);
+    expect(second.status, second.stderr).toBe(0);
+    expect(readFileSync(first.outputPath)).toEqual(readFileSync(second.outputPath));
+    expect(readFileSync(`${first.outputPath}.sha256`)).toEqual(
+      readFileSync(`${second.outputPath}.sha256`),
+    );
+  });
+
   it("requires a held list dependency to be published with its detail tool", () => {
     const source = `<!doctype html><html><head><title>Ambiguous records</title></head><body>
       <main><div id="machine-records">

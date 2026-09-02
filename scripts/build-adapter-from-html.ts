@@ -307,6 +307,14 @@ const generatorSourcesSha256 = hashGeneratorSources();
 const graftRevision = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
+const graftRevisionTimestamp = Number(
+  execFileSync("git", ["show", "-s", "--format=%ct", graftRevision], {
+    encoding: "utf8",
+  }).trim(),
+);
+if (!Number.isSafeInteger(graftRevisionTimestamp) || graftRevisionTimestamp <= 0) {
+  throw new Error("Could not resolve the Graft revision timestamp.");
+}
 const graftSourceState = execFileSync(
   "git",
   ["status", "--porcelain", "--untracked-files=no"],
@@ -360,7 +368,7 @@ const manifest = {
     url: parsedUrl.href,
     file: basename(htmlPath),
   },
-  generatedAt: new Date().toISOString(),
+  generatedAt: new Date(graftRevisionTimestamp * 1_000).toISOString(),
   notice: "Generated from exact owner HTML. Review and test before shipping.",
   provenance,
   tools,
