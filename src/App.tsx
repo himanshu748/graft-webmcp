@@ -1992,8 +1992,8 @@ export function App() {
               <h2 id="final-title">Review once. Ship one file.</h2>
               <p>
                 The adapter carries the reviewed contracts and the runtime that executes approved
-                read tools against your live DOM. Held writes stay out until you bind an owner
-                handler, so the compiler never invents permission.
+                generated tools against your live DOM. Consequential writes stay out until you bind
+                an owner handler, so the compiler never invents permission.
               </p>
               <ol className="install-steps" aria-label="Install a Graft adapter">
                 <li>

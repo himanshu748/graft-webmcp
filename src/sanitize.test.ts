@@ -58,6 +58,11 @@ describe("sanitizeFixtureHtml", () => {
         <label>Quantity <input name="quantity" type="number" min="1" max="3"></label>
         <output data-graft-cart-output>Empty</output>
       </form>
+      <section id="search" data-graft-section="capability">
+        <h2>Search</h2>
+        <p data-field="summary">Find local files.</p>
+      </section>
+      <aside data-graft-ignore>Compiler-only noise</aside>
     </body></html>`;
 
     const { document: documentNode } = sanitizeFixtureHtml(source);
@@ -67,5 +72,10 @@ describe("sanitizeFixtureHtml", () => {
     expect(form?.querySelector("select[name='product_id']")).not.toBeNull();
     expect(form?.querySelector("input[name='quantity']")?.getAttribute("max")).toBe("3");
     expect(form?.querySelector("output[data-graft-cart-output]")).not.toBeNull();
+    expect(documentNode.querySelector("#search")?.getAttribute("data-graft-section")).toBe(
+      "capability",
+    );
+    expect(documentNode.querySelector("#search [data-field='summary']")).not.toBeNull();
+    expect(documentNode.querySelector("[data-graft-ignore]")).not.toBeNull();
   });
 });

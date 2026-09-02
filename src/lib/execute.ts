@@ -6,6 +6,7 @@ import {
   normalizeParameterName,
   normalizeWhitespace,
   resolveUniqueElement,
+  sanitizePageText,
   throwIfAborted,
 } from "./dom-utils";
 import { deriveSnapshot, snapshotElementRow } from "./snapshot";
@@ -266,6 +267,144 @@ function outlineResult(root: ParentNode, maxChars: number): ToolExecutionResult 
   const headings = deriveSnapshot(root).headings.map(({ level, text }) => ({ level, text }));
   const text = headings.map((heading) => `${"#".repeat(heading.level)} ${heading.text}`).join("\n");
   return contentResult(text || "No visible headings found.", { headings }, maxChars);
+}
+
+interface LiveSectionGroupItem {
+  element: Element;
+  row: SnapshotRow;
+}
+
+function isVisibleWithin(element: Element, boundary: Element): boolean {
+  let current: Element | null = element;
+  while (current) {
+    if (!isElementVisible(current) || current.hasAttribute("data-graft-ignore")) return false;
+    if (current === boundary) return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function visibleDescendantText(element: Element, boundary: Element, maxLength: number): string {
+  const parts: string[] = [];
+  const visit = (node: Node): void => {
+    if (node.nodeType === 3) {
+      parts.push(node.textContent ?? "");
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const child = node as Element;
+    if (
+      !isVisibleWithin(child, boundary) ||
+      ["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"].includes(child.tagName)
+    ) {
+      return;
+    }
+    child.childNodes.forEach(visit);
+  };
+  visit(element);
+  return sanitizePageText(parts.join(" "), maxLength);
+}
+
+function liveSectionGroupItems(tool: GraftTool, target: Element): LiveSectionGroupItem[] {
+  if (tool.binding.kind !== "section_group" && tool.binding.kind !== "show_section") return [];
+  const binding = tool.binding;
+  const ownerDocument = getOwnerDocument(target);
+  const allIdElements = [...ownerDocument.querySelectorAll("[id]")];
+
+  return binding.sectionIds.map((id) => {
+    const matches = allIdElements.filter((candidate) => candidate.getAttribute("id") === id);
+    const section = matches[0];
+    if (
+      matches.length !== 1 ||
+      !section ||
+      section.parentElement !== target ||
+      !section.matches("section, article, [role='region']") ||
+      section.getAttribute("data-graft-section") !== binding.marker ||
+      !isVisibleWithin(section, target)
+    ) {
+      throw new Error(`Tool “${tool.name}” is stale: section “${id}” no longer matches its contract.`);
+    }
+
+    const heading = [...section.querySelectorAll("h1, h2, h3, h4, h5, h6")].find((candidate) =>
+      isVisibleWithin(candidate, section),
+    );
+    const explicitSummary = [
+      ...section.querySelectorAll('[data-field="summary"], [itemprop="description"]'),
+    ].find((candidate) => isVisibleWithin(candidate, section));
+    const summary =
+      explicitSummary ??
+      [...section.querySelectorAll("p")].find((candidate) =>
+        isVisibleWithin(candidate, section),
+      );
+    const title = heading ? visibleDescendantText(heading, section, 180) : "";
+    const summaryText = summary ? visibleDescendantText(summary, section, 400) : "";
+    if (!title || !summaryText) {
+      throw new Error(`Tool “${tool.name}” is stale: section “${id}” lost its heading or summary.`);
+    }
+
+    return {
+      element: section,
+      row: {
+        fields: { id, title, summary: summaryText },
+        text: `${title} ${summaryText}`,
+      },
+    };
+  });
+}
+
+function sectionGroupRows(tool: GraftTool, target: Element): SnapshotRow[] {
+  return liveSectionGroupItems(tool, target).map((item) => item.row);
+}
+
+function sectionGroupResult(
+  tool: GraftTool,
+  args: Record<string, unknown>,
+  target: Element,
+  maxChars: number,
+): ToolExecutionResult {
+  const page = paginate(sectionGroupRows(tool, target), args);
+  return contentResult(
+    rowsText(tool.name, page, maxChars),
+    {
+      rows: page.rows.map((row) => row.fields),
+      total: page.total,
+      offset: page.offset,
+      limit: page.limit,
+      hasMore: page.remaining > 0,
+    },
+    maxChars,
+  );
+}
+
+function showSectionResult(
+  tool: GraftTool,
+  args: Record<string, unknown>,
+  target: Element,
+  maxChars: number,
+): ToolExecutionResult {
+  if (tool.binding.kind !== "show_section") {
+    throw new Error(`Tool “${tool.name}” has an invalid section binding.`);
+  }
+  const id = normalizeWhitespace(args.id);
+  if (!tool.binding.sectionIds.includes(id)) {
+    throw new Error(`Section “${id || "(empty)"}” is not in the compiled allowlist.`);
+  }
+
+  const item = liveSectionGroupItems(tool, target).find((candidate) => candidate.row.fields.id === id);
+  if (!item) throw new Error(`Section “${id}” is no longer available.`);
+
+  const ownerDocument = getOwnerDocument(target);
+  const scrollIntoView = ownerDocument.defaultView?.Element.prototype.scrollIntoView;
+  if (typeof scrollIntoView !== "function") {
+    throw new Error("This browser cannot move the viewport to the requested section.");
+  }
+  scrollIntoView.call(item.element, { behavior: "auto", block: "center" });
+
+  return contentResult(
+    `Moved the current page to “${item.row.fields.title || id}”.`,
+    { section: item.row.fields, effect: "scrolled_into_view" },
+    maxChars,
+  );
 }
 
 function collectionRows(tool: GraftTool, root: ParentNode, target: Element): SnapshotRow[] {
@@ -848,6 +987,10 @@ export async function executeTool(
       return summaryResult(root, maxChars);
     case "outline":
       return outlineResult(root, maxChars);
+    case "section_group":
+      return sectionGroupResult(tool, args, target as Element, maxChars);
+    case "show_section":
+      return showSectionResult(tool, args, target as Element, maxChars);
     case "collection":
       return collectionResult(tool, args, root, target as Element, maxChars);
     case "collection_item":

@@ -20,6 +20,7 @@ import type {
   PageSnapshot,
   SearchFormSnapshot,
   SearchFormFieldSnapshot,
+  SectionGroupSnapshot,
   SnapshotRow,
   TableColumnSnapshot,
   TableSnapshot,
@@ -28,6 +29,13 @@ import type {
 const MAX_SNAPSHOT_ROWS = 100;
 const SEARCH_TERM = /(?:^|[-_\s])(search|query|keyword|lookup|find|q)(?:$|[-_\s])/i;
 const FIELD_TERM = /(price|cost|rating|status|availability|stock|author|date|time|category|tag|location)/i;
+const GRAFT_IGNORE_SELECTOR = "[data-graft-ignore]";
+const GRAFT_SECTION_SELECTOR = "[data-graft-section]";
+const SAFE_SECTION_NOUN = /^[a-z][a-z0-9_-]{0,30}$/;
+const SAFE_SECTION_ID = /^[A-Za-z][\w:.-]{0,79}$/;
+const MAX_GRAFT_SECTION_MARKERS = 150;
+const MAX_GRAFT_SECTION_PARENTS = 24;
+const MAX_GRAFT_SECTION_GROUPS = 6;
 
 interface CollectionCandidate {
   chrome: boolean;
@@ -40,6 +48,118 @@ function elementChildren(element: Element): Element[] {
   return [...element.children].filter(
     (child) => !["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"].includes(child.tagName),
   );
+}
+
+function isGraftIgnored(element: Element): boolean {
+  return Boolean(element.closest(GRAFT_IGNORE_SELECTOR));
+}
+
+function isInsideDeclaredSection(element: Element): boolean {
+  return Boolean(element.closest(GRAFT_SECTION_SELECTOR));
+}
+
+function isVisibleWithin(element: Element, boundary: Element): boolean {
+  let current: Element | null = element;
+  while (current) {
+    if (!isElementVisible(current) || isGraftIgnored(current)) return false;
+    if (current === boundary) return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function visibleDescendantText(element: Element, boundary: Element, maxLength: number): string {
+  const parts: string[] = [];
+  const visit = (node: Node): void => {
+    if (node.nodeType === 3) {
+      parts.push(node.textContent ?? "");
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const child = node as Element;
+    if (
+      !isVisibleWithin(child, boundary) ||
+      ["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"].includes(child.tagName)
+    ) {
+      return;
+    }
+    child.childNodes.forEach(visit);
+  };
+  visit(element);
+  return sanitizePageText(parts.join(" "), maxLength);
+}
+
+function sectionHeading(section: Element): string {
+  const heading = [...section.querySelectorAll("h1, h2, h3, h4, h5, h6")].find((candidate) =>
+    isVisibleWithin(candidate, section),
+  );
+  return heading ? visibleDescendantText(heading, section, 180) : "";
+}
+
+function sectionSummary(section: Element): string {
+  const explicit = [
+    ...section.querySelectorAll('[data-field="summary"], [itemprop="description"]'),
+  ].find((candidate) => isVisibleWithin(candidate, section));
+  if (explicit) {
+    return visibleDescendantText(explicit, section, 400);
+  }
+  const paragraph = [...section.querySelectorAll("p")].find(
+    (candidate) => isVisibleWithin(candidate, section),
+  );
+  return paragraph ? visibleDescendantText(paragraph, section, 400) : "";
+}
+
+function snapshotSectionGroups(root: ParentNode): SectionGroupSnapshot[] {
+  const ownerDocument = root.nodeType === 9 ? (root as Document) : root.ownerDocument ?? document;
+  const grouped = new Map<Element, Map<string, Element[]>>();
+  const idCounts = new Map<string, number>();
+  for (const candidate of ownerDocument.querySelectorAll("[id]")) {
+    const id = candidate.getAttribute("id") ?? "";
+    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+  }
+
+  let scannedMarkers = 0;
+  for (const section of root.querySelectorAll(GRAFT_SECTION_SELECTOR)) {
+    if (scannedMarkers >= MAX_GRAFT_SECTION_MARKERS) break;
+    scannedMarkers += 1;
+    if (!section.matches("section, article, [role='region']")) continue;
+    if (!isElementVisible(section) || isGraftIgnored(section)) continue;
+    const noun = section.getAttribute("data-graft-section")?.trim() ?? "";
+    const parent = section.parentElement;
+    if (!parent || !SAFE_SECTION_NOUN.test(noun)) continue;
+    if (!grouped.has(parent) && grouped.size >= MAX_GRAFT_SECTION_PARENTS) continue;
+    const byNoun = grouped.get(parent) ?? new Map<string, Element[]>();
+    const items = byNoun.get(noun) ?? [];
+    items.push(section);
+    byNoun.set(noun, items);
+    grouped.set(parent, byNoun);
+  }
+
+  const groups: SectionGroupSnapshot[] = [];
+  groupsLoop: for (const [parent, byNoun] of grouped) {
+    const parentSelector = createSelector(parent);
+    if (!parentSelector.stable) continue;
+    for (const [noun, sections] of byNoun) {
+      if (groups.length >= MAX_GRAFT_SECTION_GROUPS) break groupsLoop;
+      if (sections.length < 2 || sections.length > 25) continue;
+      const items = sections.map((section) => {
+        const id = section.id;
+        const title = sectionHeading(section);
+        const summary = sectionSummary(section);
+        if (!SAFE_SECTION_ID.test(id) || !title || !summary || idCounts.get(id) !== 1) return null;
+        return { id, title, summary };
+      });
+      if (items.some((item) => item === null)) continue;
+      groups.push({
+        id: stableId("section-group", parentSelector.selector, noun),
+        noun,
+        selector: parentSelector.selector,
+        sections: items as SectionGroupSnapshot["sections"],
+      });
+    }
+  }
+
+  return groups;
 }
 
 function structuralSignature(element: Element): string {
@@ -61,7 +181,12 @@ function structuralSignature(element: Element): string {
 }
 
 function repeatedChildren(parent: Element): Element[] {
-  const children = elementChildren(parent).filter(isElementVisible);
+  const children = elementChildren(parent).filter(
+    (child) =>
+      isElementVisible(child) &&
+      !isGraftIgnored(child) &&
+      !child.hasAttribute("data-graft-section"),
+  );
   if (children.length < 3) return [];
 
   const groups = new Map<string, Element[]>();
@@ -116,7 +241,13 @@ function collectionCandidates(root: ParentNode): CollectionCandidate[] {
   const claimed = new Set<Element>();
 
   for (const list of root.querySelectorAll("ul, ol, [role='list']")) {
-    if (!isElementVisible(list)) continue;
+    if (
+      !isElementVisible(list) ||
+      isGraftIgnored(list) ||
+      isInsideDeclaredSection(list)
+    ) {
+      continue;
+    }
     const items = elementChildren(list).filter(
       (child) => child.matches("li, [role='listitem']") && isElementVisible(child),
     );
@@ -129,7 +260,14 @@ function collectionCandidates(root: ParentNode): CollectionCandidate[] {
     "main, section, article, div, [role='main'], [role='region'], [role='feed']",
   );
   for (const parent of genericParents) {
-    if (!isElementVisible(parent) || parent.closest("table")) continue;
+    if (
+      !isElementVisible(parent) ||
+      isGraftIgnored(parent) ||
+      parent.closest("table") ||
+      isInsideDeclaredSection(parent)
+    ) {
+      continue;
+    }
     const items = repeatedChildren(parent);
     if (items.length < 3) continue;
     if (items.every((item) => claimed.has(item))) continue;
@@ -179,6 +317,7 @@ export function snapshotElementRow(element: Element): SnapshotRow {
     "[data-field], [itemprop], [class*='price'], [class*='cost'], [class*='rating'], [class*='status'], [class*='availability'], [class*='stock'], [class*='author'], time",
   );
   for (const fieldElement of semanticFields) {
+    if (isGraftIgnored(fieldElement)) continue;
     const key = fieldElement.tagName === "TIME" ? "date" : fieldNameFromElement(fieldElement);
     if (!key || fields[key]) continue;
     const value = sanitizePageText(
@@ -280,7 +419,7 @@ function snapshotTableRows(
 function snapshotTables(root: ParentNode): TableSnapshot[] {
   const tables: TableSnapshot[] = [];
   for (const element of root.querySelectorAll("table")) {
-    if (!isElementVisible(element) || isChrome(element)) continue;
+    if (!isElementVisible(element) || isGraftIgnored(element) || isChrome(element)) continue;
     const table = element as HTMLTableElement;
     const { columns, headerRow } = tableColumns(table);
     if (!headerRow || columns.length === 0) continue;
@@ -382,7 +521,7 @@ function searchFields(form: HTMLFormElement): SearchFormFieldSnapshot[] {
 function snapshotSearchForms(root: ParentNode): SearchFormSnapshot[] {
   const forms: SearchFormSnapshot[] = [];
   for (const element of root.querySelectorAll("form")) {
-    if (!isElementVisible(element)) continue;
+    if (!isElementVisible(element) || isGraftIgnored(element)) continue;
     const form = element as HTMLFormElement;
     const inputs = [...form.querySelectorAll<HTMLInputElement>("input")];
     const input = inputs.find(isSearchInput);
@@ -417,6 +556,7 @@ function snapshotLocalActions(root: ParentNode): LocalActionSnapshot[] {
   const actions: LocalActionSnapshot[] = [];
   for (const element of root.querySelectorAll("form")) {
     const form = element as HTMLFormElement;
+    if (isGraftIgnored(form)) continue;
     if (!isExplicitLocalAction(form)) continue;
     const product = form.querySelector<HTMLSelectElement>('select[name="product_id"]');
     const quantity = form.querySelector<HTMLInputElement>('input[name="quantity"][type="number"]');
@@ -469,7 +609,7 @@ function snapshotActionCandidates(root: ParentNode): ActionCandidateSnapshot[] {
   for (const control of root.querySelectorAll(
     "button, input[type='submit'], input[type='button'], [role='button']",
   )) {
-    if (!isElementVisible(control) || isChrome(control)) continue;
+    if (!isElementVisible(control) || isGraftIgnored(control) || isChrome(control)) continue;
     const raw =
       control.getAttribute("value") ??
       getAccessibleName(control) ??
@@ -505,7 +645,7 @@ function snapshotActionCandidates(root: ParentNode): ActionCandidateSnapshot[] {
 
 function snapshotHeadings(root: ParentNode): PageSnapshot["headings"] {
   return [...root.querySelectorAll("h1, h2, h3, h4, h5, h6")]
-    .filter(isElementVisible)
+    .filter((heading) => isElementVisible(heading) && !isGraftIgnored(heading))
     .map((heading) => ({
       level: Number(heading.tagName.slice(1)),
       text: sanitizePageText(heading.textContent, 180),
@@ -533,6 +673,7 @@ export function deriveSnapshot(root: ParentNode = document): PageSnapshot {
     description,
     mainText: main ? visibleText(main, 3_000) : "",
     headings: snapshotHeadings(root),
+    sectionGroups: snapshotSectionGroups(root),
     collections: snapshotCollections(root),
     tables: snapshotTables(root),
     searchForms: snapshotSearchForms(root),
@@ -585,6 +726,9 @@ export function snapshotFingerprint(snapshot: PageSnapshot): string {
     snapshot.url,
     snapshot.title,
     snapshot.headings.map((heading) => `${heading.level}:${heading.text}`).join("|"),
+    snapshot.sectionGroups
+      .map((group) => `${group.selector}:${group.noun}:${group.sections.map((section) => section.id).join(",")}`)
+      .join("|"),
     snapshot.collections.map((collection) => `${collection.selector}:${collection.count}`).join("|"),
     snapshot.tables.map((table) => `${table.selector}:${table.rows.length}`).join("|"),
     snapshot.searchForms

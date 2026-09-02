@@ -90,4 +90,25 @@ describe("exported adapter registration", () => {
     expect(source).toContain("const handlers = { ...generated, ...overrides };");
     expect(source).not.toContain("Pass owner-implemented handlers");
   });
+
+  it("describes generated viewport effects without calling them held writes", () => {
+    const source = buildAdapterModule(
+      { product: "Graft" },
+      [
+        {
+          name: "show_capability",
+          description: "Move the current page to one compiled section.",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+          annotations: { readOnlyHint: false, untrustedContentHint: true },
+          action: "local_navigation",
+          destructive: false,
+        },
+      ],
+      "var GraftRuntime = {};",
+    );
+
+    expect(source).toContain("Local page effects: show_capability");
+    expect(source).toContain("No exported tool performs a consequential mutation");
+    expect(source).not.toContain("Held until you opt in");
+  });
 });

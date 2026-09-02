@@ -24,6 +24,7 @@ import type {
   PageSnapshot,
   SearchFormSnapshot,
   SearchFormFieldSnapshot,
+  SectionGroupSnapshot,
   TableSnapshot,
 } from "./types";
 
@@ -118,6 +119,80 @@ function outlineTool(snapshot: PageSnapshot): GraftTool | null {
       binding: { kind: "outline" },
     },
     confidence,
+  );
+}
+
+function sectionGroupConfidence(group: SectionGroupSnapshot): ConfidenceResult {
+  return scoreConfidence({
+    accessibleName: `Every ${group.noun} has a heading and a unique id`,
+    stableSelector: "The annotated section group resolves uniquely",
+    unambiguousRecipe: `Owner markup explicitly groups ${pluralize(group.noun)}`,
+    fullyTypedInputs: "The local navigation target is a closed enum",
+  });
+}
+
+function sectionGroupTool(group: SectionGroupSnapshot): GraftTool {
+  const noun = pluralize(normalizeToolName(group.noun, "sections"));
+  return withConfidence(
+    {
+      id: stableId(group.id, "list"),
+      name: normalizeToolName(`list_${noun}`, "list_sections"),
+      description: `List the ${noun.replace(/_/g, " ")} explicitly marked on this page, with each section's stable id, heading and summary. Returns structured, untrusted page content and never changes the page.`,
+      inputSchema: {
+        type: "object",
+        properties: { ...PAGINATION_PROPERTIES },
+        additionalProperties: false,
+      },
+      recipe: "R8",
+      selector: group.selector,
+      fallbackSelectors: [],
+      action: "read",
+      readOnly: true,
+      destructive: false,
+      origin: "derived",
+      binding: {
+        kind: "section_group",
+        marker: group.noun,
+        sectionIds: group.sections.map((section) => section.id),
+      },
+    },
+    sectionGroupConfidence(group),
+  );
+}
+
+function showSectionTool(group: SectionGroupSnapshot): GraftTool {
+  const noun = singularize(normalizeToolName(group.noun, "section"));
+  return withConfidence(
+    {
+      id: stableId(group.id, "show"),
+      name: normalizeToolName(`show_${noun}`, "show_section"),
+      description: `Move the current page to one explicitly marked ${noun.replace(/_/g, " ")} section. Graft does not directly click a control, navigate or fetch.`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: `Exact ${noun.replace(/_/g, " ")} id returned by the matching list tool.`,
+            enum: group.sections.map((section) => section.id),
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+      recipe: "R8",
+      selector: group.selector,
+      fallbackSelectors: [],
+      action: "local_navigation",
+      readOnly: false,
+      destructive: false,
+      origin: "derived",
+      binding: {
+        kind: "show_section",
+        marker: group.noun,
+        sectionIds: group.sections.map((section) => section.id),
+      },
+    },
+    sectionGroupConfidence(group),
   );
 }
 
@@ -610,6 +685,9 @@ export function deriveToolsFromSnapshot(snapshot: PageSnapshot): GraftTool[] {
   const tools: GraftTool[] = [summaryTool(snapshot)];
   const outline = outlineTool(snapshot);
   if (outline) tools.push(outline);
+  for (const group of snapshot.sectionGroups) {
+    tools.push(sectionGroupTool(group), showSectionTool(group));
+  }
   tools.push(...snapshot.searchForms.map(searchTool));
   let navigationEmitted = false;
   for (const collection of snapshot.collections) {
@@ -631,7 +709,7 @@ export function deriveToolsFromSnapshot(snapshot: PageSnapshot): GraftTool[] {
   }
   tools.push(...snapshot.localActions.map(localActionTool));
   tools.push(...snapshot.actionCandidates.map(actionCandidateTool));
-  return uniqueNames(dedupeEquivalentTools(tools));
+  return gateCollectionDetailDependencies(uniqueNames(dedupeEquivalentTools(tools)));
 }
 
 /**
@@ -649,6 +727,8 @@ function dedupeEquivalentTools(tools: GraftTool[]): GraftTool[] {
       tool.recipe,
       tool.action,
       Object.keys(tool.inputSchema?.properties ?? {}).sort().join(","),
+      tool.recipe === "R8" ? tool.selector : "",
+      tool.recipe === "R8" ? JSON.stringify(tool.binding) : "",
     ].join("|");
     const existing = byShape.get(shape);
     if (!existing) {
@@ -663,6 +743,36 @@ function dedupeEquivalentTools(tools: GraftTool[]): GraftTool[] {
   }
 
   return ordered;
+}
+
+/**
+ * A detail contract tells callers to obtain its key from the matching list
+ * contract. If the list is held or rejected, exporting the detail alone creates
+ * an unusable public API. Keep both sides behind the same publication gate.
+ */
+function gateCollectionDetailDependencies(tools: GraftTool[]): GraftTool[] {
+  const listsBySelector = new Map(
+    tools
+      .filter((tool) => tool.binding.kind === "collection")
+      .map((tool) => [tool.selector, tool]),
+  );
+
+  return tools.map((tool) => {
+    if (tool.binding.kind !== "collection_item") return tool;
+    const list = listsBySelector.get(tool.selector);
+    if (!list || list.status === "auto" || list.status === "published") return tool;
+    if (tool.status !== "auto" && tool.status !== "published") return tool;
+
+    return {
+      ...tool,
+      confidence: Math.min(tool.confidence, list.confidence),
+      confidenceReasons: [
+        ...tool.confidenceReasons,
+        `Dependency gate: the matching list contract is ${list.status}`,
+      ],
+      status: list.status,
+    };
+  });
 }
 
 export function deriveTools(root: ParentNode = document): GraftTool[] {

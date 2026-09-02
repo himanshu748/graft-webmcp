@@ -213,6 +213,7 @@ This split keeps the visible source page isolated while the browser agent receiv
 | R3, collection | Three or more structurally similar articles with stable identity | `offset`, `limit` and a stable-record detail key where available | Return normalized records or one selected record with explicit truncation metadata |
 | R4, semantic table | Caption, header cells and body rows | Column filters, pagination and a stable row key where available | Return rows keyed by header names or one selected row |
 | R7, local demo cart | Signal Cabinet's explicitly marked owned form only | `product_id` enum and integer quantity from 1 to 3 | Wait for confirmation, mutate in-memory demo output and return the new local state |
+| R8, semantic section group | Two to 25 sibling `section`, `article` or region elements sharing one safe `data-graft-section` noun, unique IDs, headings and summaries | Bounded list pagination plus a closed target ID enum | Return exact section records or scroll the local viewport to one still-matching section without directly clicking, navigating or fetching |
 | R9, page orientation | Page title, headings and bounded visible text | No arguments | Return an untrusted page summary or heading outline |
 
 Repeated regions collapse to one parameterized tool. Graft must not emit one tool per product, article or row.
@@ -296,7 +297,7 @@ The downloaded JavaScript adapter contains:
 
 - A versioned `graftManifest` with every reviewed candidate, provenance, binding and status
 - A filtered `graftTools` array containing only `auto` and `published` contracts
-- The audited DOM execution runtime for approved read tools
+- The audited DOM execution runtime for approved reads and bounded local page effects
 - `registerGraftTools({ handlers })`, with optional owner overrides for generated handlers
 - Awaited WebMCP registration with annotations, partial-registration rollback, a structured report and an async cleanup function
 - Held writes as manifest metadata only, never silently registered without owner code
@@ -317,7 +318,7 @@ The bundle must not contain fixture page HTML, imported scripts, browser storage
 - Execution cancellation produces no local mutation.
 - `add_to_demo_cart` rejects unknown product IDs and quantities outside 1 to 3.
 - Local overrides validate, merge and persist through a recompile.
-- Export contains annotations, eligible contracts, the bundled read runtime, awaited `registerGraftTools({ handlers })`, rollback reporting, cleanup and no active imported content.
+- Export contains annotations, eligible contracts, the bundled DOM runtime, awaited `registerGraftTools({ handlers })`, rollback reporting, cleanup and no active imported content.
 
 ### Browser checks
 

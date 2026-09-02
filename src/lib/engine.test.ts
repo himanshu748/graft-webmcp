@@ -97,6 +97,198 @@ describe("Graft compiler", () => {
     );
   });
 
+  it("compiles an explicit semantic section group into list and viewport tools", async () => {
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Owner product</title></head><body>
+        <main id="product-surface">
+          <h1>Owner product</h1>
+          <section id="file-search" data-graft-section="capability">
+            <h2>Search local files</h2>
+            <p data-graft-ignore data-field="summary">ignored-summary-secret</p>
+            <p data-field="summary">Find notes <span hidden>hidden-child-secret</span><span aria-hidden="true">aria-child-secret</span><span style="display:none">css-child-secret</span> and screenshots without uploading them.</p>
+            <span hidden data-field="token">signed-secret-url</span>
+            <ul><li>PDF</li><li>Image</li><li>Code</li></ul>
+          </section>
+          <section id="local-mcp" data-graft-section="capability">
+            <h2>Connect local MCP</h2>
+            <p data-field="summary">Offer local tools to compatible desktop clients.</p>
+            <ul><li>Search</li><li>Read</li><li>Ask</li></ul>
+          </section>
+          <section id="agent-mode" data-graft-section="capability">
+            <h2>Run guarded tasks</h2>
+            <p data-field="summary">Edit code and run tests behind explicit safety checks.</p>
+            <ul><li>Read</li><li>Edit</li><li>Test</li></ul>
+          </section>
+        </main>
+        <aside data-graft-ignore>
+          <h2>Internal controls</h2>
+          <ul><li>One</li><li>Two</li><li>Three</li></ul>
+          <button>Delete internal state</button>
+        </aside>
+      </body></html>`,
+      "/semantic-owner.html",
+    );
+
+    const compilation = compileDocument(document);
+    expect(compilation.tools.map((tool) => tool.name)).toEqual([
+      "get_page_summary",
+      "get_page_outline",
+      "list_capabilities",
+      "show_capability",
+    ]);
+
+    const list = compilation.tools.find((tool) => tool.name === "list_capabilities") as GraftTool;
+    const show = compilation.tools.find((tool) => tool.name === "show_capability") as GraftTool;
+    expect(list).toMatchObject({ recipe: "R8", status: "auto", readOnly: true });
+    expect(show).toMatchObject({
+      recipe: "R8",
+      status: "auto",
+      readOnly: false,
+      destructive: false,
+      inputSchema: {
+        properties: {
+          id: { enum: ["file-search", "local-mcp", "agent-mode"] },
+        },
+      },
+    });
+
+    const listed = await executeTool(list, { limit: 10 }, { root: document });
+    expect(listed.data).toMatchObject({ total: 3, hasMore: false });
+    expect(listed.data?.rows).toEqual([
+      expect.objectContaining({
+        id: "file-search",
+        title: "Search local files",
+        summary: "Find notes and screenshots without uploading them.",
+      }),
+      expect.objectContaining({ id: "local-mcp", title: "Connect local MCP" }),
+      expect.objectContaining({ id: "agent-mode", title: "Run guarded tasks" }),
+    ]);
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("signed-secret-url");
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("ignored-summary-secret");
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("hidden-child-secret");
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("aria-child-secret");
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("css-child-secret");
+
+    const target = document.getElementById("local-mcp") as HTMLElement;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(document.defaultView?.Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const urlBefore = document.location.href;
+    const shown = await executeTool(show, { id: "local-mcp" }, { root: document });
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "center" });
+    expect(shown).toMatchObject({
+      ok: true,
+      data: { section: { id: "local-mcp", title: "Connect local MCP" } },
+    });
+    expect(document.location.href).toBe(urlBefore);
+
+    await expect(executeTool(show, { id: "unknown" }, { root: document })).rejects.toThrow();
+
+    const injected = document.createElement("section");
+    injected.id = "injected";
+    injected.setAttribute("data-graft-section", "capability");
+    injected.innerHTML = "<h2>Injected</h2><p>Not in the compiled allowlist.</p>";
+    document.getElementById("product-surface")?.append(injected);
+    const afterInjection = await executeTool(list, { limit: 10 }, { root: document });
+    expect(afterInjection.data?.total).toBe(3);
+    expect(JSON.stringify(afterInjection.data?.rows)).not.toContain("injected");
+    injected.remove();
+
+    target.removeAttribute("data-graft-section");
+    await expect(executeTool(show, { id: "local-mcp" }, { root: document })).rejects.toThrow(
+      "no longer matches its contract",
+    );
+
+    target.setAttribute("data-graft-section", "capability");
+    scrollIntoView.mockClear();
+    const duplicate = document.createElement("div");
+    duplicate.id = "local-mcp";
+    document.body.append(duplicate);
+    await expect(executeTool(show, { id: "local-mcp" }, { root: document })).rejects.toThrow(
+      "no longer matches its contract",
+    );
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    duplicate.remove();
+    target.querySelector("h2")?.remove();
+    await expect(executeTool(list, { limit: 10 }, { root: document })).rejects.toThrow(
+      "lost its heading or summary",
+    );
+  });
+
+  it("keeps separate semantic groups and unrelated repeated collections", () => {
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Mixed owner page</title></head><body>
+        <main id="mixed-surface">
+          <section id="cap-one" data-graft-section="capability"><h2>Capability one</h2><p>First capability.</p></section>
+          <section id="cap-two" data-graft-section="capability"><h2>Capability two</h2><p>Second capability.</p></section>
+          <article class="product" data-product-id="p1"><h2>Product one</h2></article>
+          <article class="product" data-product-id="p2"><h2>Product two</h2></article>
+          <article class="product" data-product-id="p3"><h2>Product three</h2></article>
+        </main>
+        <aside id="secondary-surface">
+          <section id="cap-three" data-graft-section="capability"><h2>Capability three</h2><p>Third capability.</p></section>
+          <section id="cap-four" data-graft-section="capability"><h2>Capability four</h2><p>Fourth capability.</p></section>
+        </aside>
+      </body></html>`,
+      "/mixed-owner.html",
+    );
+
+    const tools = deriveTools(document);
+    expect(tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "list_capabilities",
+        "show_capability",
+        "list_capabilities_2",
+        "show_capability_2",
+        "list_products",
+        "get_product",
+      ]),
+    );
+    expect(tools.find((tool) => tool.name === "show_capability")?.status).toBe("auto");
+    expect(tools.find((tool) => tool.name === "show_capability_2")?.status).toBe("auto");
+  });
+
+  it("bounds explicit section-group discovery on adversarial markup", () => {
+    const groups = Array.from({ length: 100 }, (_, index) => `
+      <div id="group-${index}">
+        <section id="section-${index}-a" data-graft-section="capability"><h2>First ${index}</h2><p>First summary.</p></section>
+        <section id="section-${index}-b" data-graft-section="capability"><h2>Second ${index}</h2><p>Second summary.</p></section>
+      </div>`).join("");
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Bounded groups</title></head><body><main>${groups}</main></body></html>`,
+      "/bounded-groups.html",
+    );
+
+    const compilation = compileDocument(document);
+    expect(compilation.snapshot.sectionGroups).toHaveLength(6);
+    expect(compilation.tools.filter((tool) => tool.recipe === "R8")).toHaveLength(12);
+  });
+
+  it("holds a detail contract when its required list contract is not eligible", () => {
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Ambiguous records</title></head><body>
+        <main><div id="machine-records">
+          <div class="machine-record" data-machine-id="one"></div>
+          <div class="machine-record" data-machine-id="two"></div>
+          <div class="machine-record" data-machine-id="three"></div>
+        </div></main>
+      </body></html>`,
+      "/ambiguous-records.html",
+    );
+
+    const tools = deriveTools(document);
+    const list = tools.find((tool) => tool.name === "list_machines");
+    const detail = tools.find((tool) => tool.name === "get_machine");
+    expect(list?.status).toBe("held");
+    expect(detail?.status).toBe("held");
+    expect(detail?.confidenceReasons).toContain(
+      "Dependency gate: the matching list contract is held",
+    );
+  });
+
   it("executes collection reads as bounded JSON", async () => {
     const document = fixtureDocument(catalogHtml, "/fixtures/catalog.html");
     const tool = deriveTools(document).find((candidate) => candidate.name === "list_products");

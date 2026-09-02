@@ -327,7 +327,9 @@ export function nounFromLabel(label: string, fallback: string): string {
 export function visibleText(element: Element, maxLength = 500): string {
   const clone = element.cloneNode(true) as Element;
   clone
-    .querySelectorAll("script, style, template, noscript, svg, [hidden], [aria-hidden='true']")
+    .querySelectorAll(
+      "script, style, template, noscript, svg, [hidden], [aria-hidden='true'], [data-graft-ignore]",
+    )
     .forEach((node) => node.remove());
   return sanitizePageText(clone.textContent, maxLength);
 }

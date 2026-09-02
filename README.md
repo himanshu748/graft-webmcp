@@ -14,11 +14,21 @@ Paste any public URL. Graft reads that page once on the server, strips every scr
 - **Verify what you shipped, and detect drift.** `graft_verify_url` opens a deployed site in a headless browser, reads the tools it actually registers, and reports whether the contracts are well formed and uniquely named. Pass the tool names you exported and it reports drift: what is missing, what is new. This closes the loop from discover to review to ship to verify to maintain.
 - **Graft is agent-operable itself.** Alongside the tools it derives, Graft registers its own control surface: `graft_status`, `graft_compile_url`, `graft_list_candidates`, `graft_inspect_candidate`, `graft_set_candidate`, `graft_export_adapter` and `graft_verify_url`. An agent can ask Graft to compile a URL, read the scored evidence behind a candidate, publish a held one and export the reviewed contract, without touching the interface. The `graft_` prefix is load-bearing: compiling Graft's own page derives a `list_tool_candidates`, and two tools cannot share a name.
 - **Live search, not just snapshot filtering.** When a page's search form declares a GET endpoint, the derived tool replays the query against the live site and returns fresh results the snapshot never held. `search_this_site("asyncio")` on python.org returns 20 real results. The replay goes through the same intake endpoint, so it inherits every host check, the denylist, robots and the size caps.
-- **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
+- **Semantic derivation.** Search forms, repeated content regions and data tables become typed tools. An owner can mark related sections with `data-graft-section="capability"`; Graft then emits `list_capabilities` plus a bounded `show_capability` viewport action and suppresses noisy nested lists. Site chrome such as navigation, table-of-contents and footers is excluded, because a nav bar repeats exactly like content does.
 - **Explainable confidence.** A name lifted from a class attribute is not an accessible name, and the difference is scored. Every tool shows the evidence behind its number.
 - **Human repair.** Rename a tool, rewrite its description, then register it. Edits are stored per source and outrank re-derivation.
 - **Governed execution.** Read-only tools carry `readOnlyHint`, all snapshot-derived tools carry `untrustedContentHint`, and every call appears in a visible timeline with its exact arguments and result.
-- **Reviewed export.** Download one file. It carries the manifest, the reviewed contracts and Graft's runtime inlined, so `await registerGraftTools()` registers every read-only tool with no owner code and no dependency on Graft's host. Any single tool can still be replaced with `registerGraftTools({ handlers })`.
+- **Reviewed export.** Download one file. It carries the manifest, the reviewed contracts and Graft's runtime inlined, so `await registerGraftTools()` registers every approved generated handler with no owner code and no dependency on Graft's host. Any single tool can still be replaced with `registerGraftTools({ handlers })`.
+
+For an exact owner build, compile the final HTML file rather than copying descriptors by hand:
+
+```bash
+npm run build:runtime
+npx vite-node scripts/build-adapter-from-html.ts \
+  /path/to/site/index.html https://owner.example/ /path/to/site/graft-adapter.js
+```
+
+The adapter manifest records hashes for the source HTML, sanitized snapshot, runtime and exported tool set plus the Graft revision that produced it.
 
 ## What it proves
 
