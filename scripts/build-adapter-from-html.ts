@@ -304,9 +304,14 @@ const reviewedCompilationTools = review
 const runtimeSource = readFileSync("src/generated/graft-runtime.js", "utf8");
 const exportedRuntimeSource = runtimeSource.trim();
 const generatorSourcesSha256 = hashGeneratorSources();
-const graftRevision = execFileSync("git", ["describe", "--always", "--dirty"], {
+const graftRevision = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
+const graftSourceState = execFileSync(
+  "git",
+  ["status", "--porcelain", "--untracked-files=no"],
+  { encoding: "utf8" },
+).trim().length === 0 ? "clean" : "dirty";
 
 const tools = reviewedCompilationTools.map((tool) => ({
   name: tool.name,
@@ -327,6 +332,7 @@ const exported = tools
   .map(({ status: _status, ...tool }) => tool);
 const provenance = {
   graftRevision,
+  graftSourceState,
   sourceHtmlSha256: sha256(html),
   sanitizedSnapshotFingerprint: snapshotFingerprint(compilation.snapshot),
   runtimeSha256: sha256(exportedRuntimeSource),

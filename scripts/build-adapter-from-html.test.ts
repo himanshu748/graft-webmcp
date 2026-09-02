@@ -108,6 +108,8 @@ describe("HTML adapter review overlay", { timeout: CLI_TEST_TIMEOUT_MS }, () => 
       decisions: [{ name: "add_to_demo_cart", status: "published" }],
     });
     expect(adapter.graftManifest.provenance.generatorSourcesSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(adapter.graftManifest.provenance.graftRevision).toMatch(/^[a-f0-9]{40}$/);
+    expect(["clean", "dirty"]).toContain(adapter.graftManifest.provenance.graftSourceState);
     const adapterSource = readFileSync(run.outputPath, "utf8");
     const checksumSource = readFileSync(`${run.outputPath}.sha256`, "utf8");
     expect(checksumSource).toBe(
