@@ -1659,7 +1659,7 @@ button:disabled {
   min-width: 0;
   flex-direction: column;
   justify-content: flex-start;
-  gap: clamp(2rem, 4vw, 4rem);
+  gap: clamp(1.35rem, 2.5vw, 2.25rem);
   padding: clamp(1.25rem, 3vw, 2.5rem);
   border-right: 1px solid var(--border);
 }
@@ -1680,6 +1680,58 @@ button:disabled {
   color: var(--muted-foreground);
   font-size: 0.875rem;
   line-height: 1.65;
+}
+
+.verification-preset {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 0;
+  border-block: 1px solid var(--border);
+}
+
+.verification-preset > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.verification-preset span,
+.verification-preset small {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
+.verification-preset strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.verification-preset button {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid color-mix(in oklch, var(--success) 52%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--success) 8%, var(--card));
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.verification-preset button svg {
+  flex: 0 0 auto;
+  color: var(--success);
+}
+
+.verification-preset button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .verification-form {
@@ -1760,14 +1812,14 @@ button:disabled {
 
 .verification-output {
   min-width: 0;
-  min-height: 620px;
+  min-height: 720px;
   background: var(--background);
 }
 
 .verification-empty,
 .verification-error {
   display: grid;
-  min-height: 620px;
+  min-height: 720px;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.85rem;
   align-content: center;
@@ -1804,18 +1856,94 @@ button:disabled {
   color: var(--muted-foreground);
 }
 
+.verification-retry {
+  min-height: 42px;
+  margin-top: 1rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .verification-report {
   min-width: 0;
 }
 
 .verification-report-head {
   display: flex;
-  min-height: 112px;
+  min-height: 166px;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 1.25rem 1.5rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
   border-bottom: 1px solid var(--border-strong);
+  background:
+    radial-gradient(circle at 82% 20%, color-mix(in oklch, var(--success) 11%, transparent), transparent 34%),
+    var(--card);
+}
+
+.verification-report[data-verdict="fail"] .verification-report-head {
+  background:
+    radial-gradient(circle at 82% 20%, color-mix(in oklch, var(--destructive) 10%, transparent), transparent 34%),
+    var(--card);
+}
+
+.verification-live-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.verification-seal {
+  position: relative;
+  display: inline-grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--success) 60%, var(--border));
+  border-radius: 50%;
+  color: var(--success);
+  box-shadow: 0 0 0 7px color-mix(in oklch, var(--success) 6%, transparent);
+}
+
+.verification-report[data-verdict="fail"] .verification-seal {
+  border-color: color-mix(in oklch, var(--destructive) 60%, var(--border));
+  color: var(--destructive);
+  box-shadow: 0 0 0 7px color-mix(in oklch, var(--destructive) 6%, transparent);
+}
+
+.verification-live-summary span,
+.verification-live-summary strong {
+  display: block;
+}
+
+.verification-live-summary > div > span {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.verification-live-summary strong {
+  margin-top: 0.15rem;
+  font-size: clamp(1.4rem, 2.6vw, 2.1rem);
+  font-weight: 620;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.verification-live-summary p {
+  max-width: 46ch;
+  margin: 0.55rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.5;
 }
 
 .verification-verdict {
@@ -1861,8 +1989,18 @@ button:disabled {
 .verification-score strong {
   display: block;
   font-family: var(--font-mono);
-  font-size: 1.3rem;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.07em;
+  line-height: 1;
+}
+
+.verification-score strong span {
+  display: inline;
+  margin-inline: 0.12em;
+  color: var(--muted-foreground);
+  font-size: 0.58em;
 }
 
 .verification-score small {
@@ -1895,6 +2033,148 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.verification-target-action {
+  display: inline-flex !important;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  overflow: visible !important;
+}
+
+.verification-registry {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.verification-registry::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24%;
+  width: 18%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--success) 14%, transparent), transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: skewX(-12deg);
+}
+
+.verification-registry-head {
+  display: flex;
+  min-height: 112px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.verification-registry-head > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.verification-registry-head span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.verification-registry-head h3 {
+  max-width: 30ch;
+  margin: 0;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.verification-registry-head > strong {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 3.25rem;
+  font-weight: 450;
+  letter-spacing: -0.09em;
+  line-height: 0.8;
+}
+
+.verification-tool-registry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verification-tool-registry li {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 74px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  gap: 0.35rem 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.verification-tool-registry li:nth-child(2n) {
+  border-right: 0;
+}
+
+.verification-tool-registry li:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.verification-tool-registry li::after {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--success);
+  content: "";
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 8%, transparent);
+}
+
+.verification-report[data-verdict="fail"] .verification-tool-registry li::after {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--warning) 8%, transparent);
+}
+
+.verification-tool-registry span,
+.verification-tool-registry small {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.verification-tool-registry code {
+  min-width: 0;
+  padding-right: 0.9rem;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.verification-tool-registry small {
+  grid-column: 2;
+  color: var(--success);
+}
+
+.verification-report[data-verdict="fail"] .verification-tool-registry small {
+  color: var(--warning);
 }
 
 .verification-block {
@@ -2035,6 +2315,16 @@ button:disabled {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   line-height: 1.55;
+}
+
+.verification-findings-clear {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--success);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .verification-drift {
@@ -2226,7 +2516,9 @@ button:disabled {
   }
 
   .verification-submit,
-  .verification-target {
+  .verification-target,
+  .verification-preset button,
+  .verification-retry {
     transition: background-color 100ms cubic-bezier(0, 0, 0.2, 1), border-color 100ms cubic-bezier(0, 0, 0.2, 1), color 100ms cubic-bezier(0, 0, 0.2, 1), transform 100ms cubic-bezier(0, 0, 0.2, 1);
   }
 
@@ -2264,6 +2556,12 @@ button:disabled {
     background: var(--accent);
     color: var(--foreground);
   }
+
+  .verification-preset button:not(:disabled):hover,
+  .verification-retry:hover {
+    border-color: color-mix(in oklch, var(--success) 68%, var(--border));
+    background: color-mix(in oklch, var(--success) 12%, var(--card));
+  }
 }
 
 .primary-cta:active,
@@ -2282,7 +2580,9 @@ button:disabled {
 }
 
 .verification-submit:active,
-.verification-target:active {
+.verification-target:active,
+.verification-preset button:active,
+.verification-retry:active {
   transform: translateY(1px);
 }
 
@@ -2696,6 +2996,40 @@ button:disabled {
 
   .verification-report-head {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .verification-score {
+    text-align: left;
+  }
+
+  .verification-registry-head {
+    min-height: 100px;
+    align-items: flex-start;
+  }
+
+  .verification-tool-registry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .verification-tool-registry li,
+  .verification-tool-registry li:nth-child(2n),
+  .verification-tool-registry li:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .verification-tool-registry li:last-child {
+    border-bottom: 0;
+  }
+
+  .verification-target-action {
+    font-size: 0;
+  }
+
+  .verification-target-action svg {
+    width: 18px;
+    height: 18px;
   }
 
   .verification-check {
@@ -2736,6 +3070,16 @@ button:disabled {
   @keyframes compile-pulse {
     from { opacity: 0.45; transform: scale(0.85); }
     to { opacity: 1; transform: scale(1); }
+  }
+
+  .verification-report[data-verdict^="pass"] .verification-registry::after {
+    animation: verification-scan 400ms cubic-bezier(0, 0, 0.2, 1) 1;
+  }
+
+  @keyframes verification-scan {
+    0% { left: -24%; opacity: 0; }
+    24% { opacity: 1; }
+    100% { left: 112%; opacity: 0; }
   }
 }
 

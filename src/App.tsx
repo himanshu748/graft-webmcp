@@ -129,6 +129,20 @@ interface VerificationFailure {
   detail?: string;
 }
 
+const AGENT_REVIEW_ROOM_PRESET = {
+  url: "https://omnidev-flame.vercel.app/agent-lab/",
+  tools: [
+    "get_page_summary",
+    "get_page_outline",
+    "list_files",
+    "get_file",
+    "list_patches",
+    "get_patch",
+    "list_test_results",
+    "apply_patch",
+  ],
+} as const;
+
 type VerificationStatus = "idle" | "loading" | "complete" | "error";
 
 interface PendingConfirmation {
@@ -1097,8 +1111,11 @@ export function App() {
     return built;
   }, [buildExport, exportAdapter]);
 
-  const verifyDeployment = useCallback(async () => {
-    const target = verificationUrl.trim();
+  const verifyDeployment = useCallback(async (override?: {
+    url?: string;
+    expected?: readonly string[];
+  }) => {
+    const target = override?.url?.trim() || verificationUrl.trim();
     if (!target) {
       setVerificationStatus("error");
       setVerificationReport(null);
@@ -1116,10 +1133,12 @@ export function App() {
     setVerificationReport(null);
     setVerificationFailure(null);
 
-    const expected = verificationExpected
-      .split(",")
-      .map((name) => name.trim())
-      .filter(Boolean);
+    const expected = override?.expected
+      ? [...override.expected]
+      : verificationExpected
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean);
     const query = new URLSearchParams({ url: target });
     if (expected.length > 0) query.set("expect", expected.join(","));
 
@@ -2216,11 +2235,35 @@ export function App() {
             <div className="verification-control">
               <div className="verification-intro">
                 <p className="kicker">Live deployment audit</p>
-                <h2 id="verification-title">Verify what actually shipped.</h2>
+                <h2 id="verification-title">See the tools an agent actually gets.</h2>
                 <p>
-                  Graft opens the public page in its WebMCP-capable browser and reports the native
-                  tool registry. Add the reviewed names to detect missing or unexpected tools.
+                  Graft opens the public page in a WebMCP-capable browser, reads its native registry
+                  and compares it with the contract you reviewed.
                 </p>
+              </div>
+
+              <div className="verification-preset">
+                <div>
+                  <span>Live proof target</span>
+                  <strong>OmniDev Agent Review Room</strong>
+                  <small>Eight expected tools on an origin Graft does not serve.</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerificationUrl(AGENT_REVIEW_ROOM_PRESET.url);
+                    setVerificationExpected(AGENT_REVIEW_ROOM_PRESET.tools.join(", "));
+                    void verifyDeployment({
+                      url: AGENT_REVIEW_ROOM_PRESET.url,
+                      expected: AGENT_REVIEW_ROOM_PRESET.tools,
+                    });
+                  }}
+                  disabled={verificationStatus === "loading"}
+                  aria-label="Verify the live OmniDev Agent Review Room and its eight expected tools"
+                >
+                  Verify the 8-tool surface
+                  <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                </button>
               </div>
 
               <form
@@ -2243,6 +2286,7 @@ export function App() {
                     onChange={(event) => setVerificationUrl(event.target.value)}
                     placeholder="https://your-site.example"
                     disabled={verificationStatus === "loading"}
+                    aria-describedby="verification-help"
                     required
                   />
                 </label>
@@ -2256,9 +2300,10 @@ export function App() {
                     onChange={(event) => setVerificationExpected(event.target.value)}
                     placeholder="search_catalog, get_product, update_cart"
                     disabled={verificationStatus === "loading"}
+                    aria-describedby="verification-help"
                   />
                 </label>
-                <p className="verification-help">
+                <p className="verification-help" id="verification-help">
                   Separate exact tool names with commas. Graft sends them to the verifier without
                   renaming or reordering them.
                 </p>
@@ -2284,7 +2329,6 @@ export function App() {
 
             <div
               className="verification-output"
-              aria-live="polite"
               aria-busy={verificationStatus === "loading"}
             >
               {verificationStatus === "idle" && (
@@ -2313,29 +2357,49 @@ export function App() {
                   <div>
                     <strong>{verificationFailure.message}</strong>
                     {verificationFailure.detail && <p>{verificationFailure.detail}</p>}
+                    <button
+                      type="button"
+                      className="verification-retry"
+                      onClick={() => void verifyDeployment()}
+                    >
+                      Try verification again
+                    </button>
                   </div>
                 </div>
               )}
 
               {verificationStatus === "complete" && verificationReport && (
                 <div className="verification-report" data-verdict={verificationReport.verdict}>
-                  <header className="verification-report-head">
-                    <div className="verification-verdict">
-                      {verificationReport.verdict === "fail" ? (
-                        <X size={22} weight="bold" aria-hidden="true" />
-                      ) : (
-                        <Check size={22} weight="bold" aria-hidden="true" />
-                      )}
+                  <header className="verification-report-head" role="status">
+                    <div className="verification-live-summary">
+                      <span className="verification-seal" aria-hidden="true">
+                        {verificationReport.verdict === "fail" ? (
+                          <X size={24} weight="bold" />
+                        ) : (
+                          <Check size={24} weight="bold" />
+                        )}
+                      </span>
                       <div>
-                        <span>Live verdict</span>
-                        <strong>{verificationReport.verdict}</strong>
+                        <span>Live browser result</span>
+                        <strong>
+                          {verificationReport.verdict === "fail"
+                            ? verificationReport.drift && !verificationReport.drift.exact
+                              ? "Tool-name drift found"
+                              : "Verification needs attention"
+                            : `${verificationReport.tools.length} tools live`}
+                        </strong>
+                        <p>
+                          {verificationReport.drift?.exact
+                            ? "The deployed tool names exactly match the expected names."
+                            : "The result below comes from the registry exposed by the deployed page."}
+                        </p>
                       </div>
                     </div>
                     <div className="verification-score">
                       <strong>
-                        {verificationReport.passed}/{verificationReport.total}
+                        {verificationReport.passed}<span>/</span>{verificationReport.total}
                       </strong>
-                      <span>decisive checks passed</span>
+                      <span>checks passed</span>
                       {verificationReport.skipped > 0 && (
                         <small>{verificationReport.skipped} inconclusive</small>
                       )}
@@ -2347,10 +2411,41 @@ export function App() {
                     href={verificationReport.url}
                     target="_blank"
                     rel="noreferrer"
+                    aria-label={`Open verified origin ${verificationReport.url} in a new tab`}
                   >
                     <span>{verificationReport.url}</span>
-                    <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                    <span className="verification-target-action">
+                      Open origin
+                      <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                    </span>
                   </a>
+
+                  <section className="verification-registry" aria-labelledby="verification-tools">
+                    <div className="verification-registry-head">
+                      <div>
+                        <span>Native tool registry</span>
+                        <h3 id="verification-tools">The exact surface available to agents</h3>
+                      </div>
+                      <strong aria-label={`${verificationReport.tools.length} tools`}>
+                        {String(verificationReport.tools.length).padStart(2, "0")}
+                      </strong>
+                    </div>
+                    {verificationReport.tools.length > 0 ? (
+                      <ol className="verification-tool-registry">
+                        {verificationReport.tools.map((tool, index) => (
+                          <li key={`${tool}-${index}`}>
+                            <span>{String(index + 1).padStart(2, "0")}</span>
+                            <code>{tool}</code>
+                            <small>
+                              {verificationReport.drift?.exact ? "expected name matched" : "registered"}
+                            </small>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="verification-block-empty">The endpoint returned no tools.</p>
+                    )}
+                  </section>
 
                   <section className="verification-block" aria-labelledby="verification-checks">
                     <div className="verification-block-head">
@@ -2387,19 +2482,34 @@ export function App() {
                   </section>
 
                   <div className="verification-evidence-grid">
-                    <section className="verification-block" aria-labelledby="verification-tools">
+                    <section className="verification-block" aria-labelledby="verification-findings">
                       <div className="verification-block-head">
-                        <h3 id="verification-tools">Live tools</h3>
-                        <span>{verificationReport.tools.length} registered</span>
+                        <h3 id="verification-findings">Contract findings</h3>
+                        <span>
+                          {verificationReport.findings.reduce(
+                            (total, finding) => total + finding.issues.length,
+                            0,
+                          )} issues
+                        </span>
                       </div>
-                      {verificationReport.tools.length > 0 ? (
-                        <ul className="verification-tool-list">
-                          {verificationReport.tools.map((tool, index) => (
-                            <li key={`${tool}-${index}`}><code>{tool}</code></li>
+                      {verificationReport.findings.length > 0 ? (
+                        <div className="verification-findings">
+                          {verificationReport.findings.map((finding, index) => (
+                            <div key={`${finding.name}-${index}`}>
+                              <code>{finding.name}</code>
+                              <ul>
+                                {finding.issues.map((issue, issueIndex) => (
+                                  <li key={`${issue}-${issueIndex}`}>{issue}</li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       ) : (
-                        <p className="verification-block-empty">The endpoint returned no tools.</p>
+                        <p className="verification-findings-clear">
+                          <Check size={16} weight="bold" aria-hidden="true" />
+                          No contract findings
+                        </p>
                       )}
                     </section>
 
@@ -2415,7 +2525,7 @@ export function App() {
                           {verificationReport.drift.exact && (
                             <p className="verification-drift-exact">
                               <Check size={16} weight="bold" aria-hidden="true" />
-                              Exact reviewed contract match
+                              Exact expected-name match
                             </p>
                           )}
                           {verificationReport.drift.missing.length > 0 && (
@@ -2438,29 +2548,6 @@ export function App() {
                       )}
                     </section>
                   </div>
-
-                  <section className="verification-block" aria-labelledby="verification-findings">
-                    <div className="verification-block-head">
-                      <h3 id="verification-findings">Contract findings</h3>
-                      <span>{verificationReport.findings.length} tools flagged</span>
-                    </div>
-                    {verificationReport.findings.length > 0 ? (
-                      <div className="verification-findings">
-                        {verificationReport.findings.map((finding, index) => (
-                          <div key={`${finding.name}-${index}`}>
-                            <code>{finding.name}</code>
-                            <ul>
-                              {finding.issues.map((issue, issueIndex) => (
-                                <li key={`${issue}-${issueIndex}`}>{issue}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="verification-block-empty">No contract findings were returned.</p>
-                    )}
-                  </section>
 
                   <details className="verification-environment">
                     <summary>Verification environment</summary>
