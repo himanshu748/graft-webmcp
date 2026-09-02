@@ -1,6 +1,7 @@
 import {
   createSelector,
   describeSectionLabel,
+  findSemanticSectionFields,
   isStructuralNoun,
   findSectionLabel,
   getAccessibleName,
@@ -29,13 +30,14 @@ import type {
 const MAX_SNAPSHOT_ROWS = 100;
 const SEARCH_TERM = /(?:^|[-_\s])(search|query|keyword|lookup|find|q)(?:$|[-_\s])/i;
 const FIELD_TERM = /(price|cost|rating|status|availability|stock|author|date|time|category|tag|location)/i;
-const GRAFT_IGNORE_SELECTOR = "[data-graft-ignore]";
 const GRAFT_SECTION_SELECTOR = "[data-graft-section]";
 const SAFE_SECTION_NOUN = /^[a-z][a-z0-9_-]{0,30}$/;
 const SAFE_SECTION_ID = /^[A-Za-z][\w:.-]{0,79}$/;
 const MAX_GRAFT_SECTION_MARKERS = 150;
 const MAX_GRAFT_SECTION_PARENTS = 24;
 const MAX_GRAFT_SECTION_GROUPS = 6;
+const MAX_SECTION_TEXT_NODES = 800;
+const MAX_VISIBILITY_ANCESTOR_STEPS = 100;
 
 interface CollectionCandidate {
   chrome: boolean;
@@ -51,62 +53,47 @@ function elementChildren(element: Element): Element[] {
 }
 
 function isGraftIgnored(element: Element): boolean {
-  return Boolean(element.closest(GRAFT_IGNORE_SELECTOR));
+  let current: Element | null = element;
+  for (let steps = 0; current && steps < MAX_VISIBILITY_ANCESTOR_STEPS; steps += 1) {
+    if (current.hasAttribute("data-graft-ignore")) return true;
+    current = current.parentElement;
+  }
+  return current !== null;
 }
 
 function isInsideDeclaredSection(element: Element): boolean {
   return Boolean(element.closest(GRAFT_SECTION_SELECTOR));
 }
 
-function isVisibleWithin(element: Element, boundary: Element): boolean {
-  let current: Element | null = element;
-  while (current) {
-    if (!isElementVisible(current) || isGraftIgnored(current)) return false;
-    if (current === boundary) return true;
-    current = current.parentElement;
-  }
-  return false;
-}
-
-function visibleDescendantText(element: Element, boundary: Element, maxLength: number): string {
+function visibleDescendantText(element: Element, maxLength: number): string {
   const parts: string[] = [];
-  const visit = (node: Node): void => {
+  const stack: Node[] = [element];
+  let visited = 0;
+
+  while (stack.length > 0 && visited < MAX_SECTION_TEXT_NODES) {
+    const node = stack.pop();
+    if (!node) continue;
+    visited += 1;
+    if (node !== element && node.nextSibling) stack.push(node.nextSibling);
+
     if (node.nodeType === 3) {
       parts.push(node.textContent ?? "");
-      return;
+      continue;
     }
-    if (node.nodeType !== 1) return;
+    if (node.nodeType !== 1) continue;
     const child = node as Element;
     if (
-      !isVisibleWithin(child, boundary) ||
+      !isElementVisible(child) ||
+      child.hasAttribute("data-graft-ignore") ||
       ["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"].includes(child.tagName)
     ) {
-      return;
+      continue;
     }
-    child.childNodes.forEach(visit);
-  };
-  visit(element);
-  return sanitizePageText(parts.join(" "), maxLength);
-}
 
-function sectionHeading(section: Element): string {
-  const heading = [...section.querySelectorAll("h1, h2, h3, h4, h5, h6")].find((candidate) =>
-    isVisibleWithin(candidate, section),
-  );
-  return heading ? visibleDescendantText(heading, section, 180) : "";
-}
-
-function sectionSummary(section: Element): string {
-  const explicit = [
-    ...section.querySelectorAll('[data-field="summary"], [itemprop="description"]'),
-  ].find((candidate) => isVisibleWithin(candidate, section));
-  if (explicit) {
-    return visibleDescendantText(explicit, section, 400);
+    if (child.firstChild) stack.push(child.firstChild);
   }
-  const paragraph = [...section.querySelectorAll("p")].find(
-    (candidate) => isVisibleWithin(candidate, section),
-  );
-  return paragraph ? visibleDescendantText(paragraph, section, 400) : "";
+
+  return sanitizePageText(parts.join(" "), maxLength);
 }
 
 function snapshotSectionGroups(root: ParentNode): SectionGroupSnapshot[] {
@@ -144,8 +131,9 @@ function snapshotSectionGroups(root: ParentNode): SectionGroupSnapshot[] {
       if (sections.length < 2 || sections.length > 25) continue;
       const items = sections.map((section) => {
         const id = section.id;
-        const title = sectionHeading(section);
-        const summary = sectionSummary(section);
+        const fields = findSemanticSectionFields(section);
+        const title = fields.heading ? visibleDescendantText(fields.heading, 180) : "";
+        const summary = fields.summary ? visibleDescendantText(fields.summary, 400) : "";
         if (!SAFE_SECTION_ID.test(id) || !title || !summary || idCounts.get(id) !== 1) return null;
         return { id, title, summary };
       });

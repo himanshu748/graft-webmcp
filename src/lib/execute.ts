@@ -1,6 +1,7 @@
 import {
   abortError,
   errorMessage,
+  findSemanticSectionFields,
   getOwnerDocument,
   isElementVisible,
   normalizeParameterName,
@@ -274,9 +275,12 @@ interface LiveSectionGroupItem {
   row: SnapshotRow;
 }
 
+const MAX_SECTION_TEXT_NODES = 800;
+const MAX_VISIBILITY_ANCESTOR_STEPS = 100;
+
 function isVisibleWithin(element: Element, boundary: Element): boolean {
   let current: Element | null = element;
-  while (current) {
+  for (let steps = 0; current && steps < MAX_VISIBILITY_ANCESTOR_STEPS; steps += 1) {
     if (!isElementVisible(current) || current.hasAttribute("data-graft-ignore")) return false;
     if (current === boundary) return true;
     current = current.parentElement;
@@ -284,24 +288,34 @@ function isVisibleWithin(element: Element, boundary: Element): boolean {
   return false;
 }
 
-function visibleDescendantText(element: Element, boundary: Element, maxLength: number): string {
+function visibleDescendantText(element: Element, maxLength: number): string {
   const parts: string[] = [];
-  const visit = (node: Node): void => {
+  const stack: Node[] = [element];
+  let visited = 0;
+
+  while (stack.length > 0 && visited < MAX_SECTION_TEXT_NODES) {
+    const node = stack.pop();
+    if (!node) continue;
+    visited += 1;
+    if (node !== element && node.nextSibling) stack.push(node.nextSibling);
+
     if (node.nodeType === 3) {
       parts.push(node.textContent ?? "");
-      return;
+      continue;
     }
-    if (node.nodeType !== 1) return;
+    if (node.nodeType !== 1) continue;
     const child = node as Element;
     if (
-      !isVisibleWithin(child, boundary) ||
+      !isElementVisible(child) ||
+      child.hasAttribute("data-graft-ignore") ||
       ["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"].includes(child.tagName)
     ) {
-      return;
+      continue;
     }
-    child.childNodes.forEach(visit);
-  };
-  visit(element);
+
+    if (child.firstChild) stack.push(child.firstChild);
+  }
+
   return sanitizePageText(parts.join(" "), maxLength);
 }
 
@@ -325,19 +339,9 @@ function liveSectionGroupItems(tool: GraftTool, target: Element): LiveSectionGro
       throw new Error(`Tool “${tool.name}” is stale: section “${id}” no longer matches its contract.`);
     }
 
-    const heading = [...section.querySelectorAll("h1, h2, h3, h4, h5, h6")].find((candidate) =>
-      isVisibleWithin(candidate, section),
-    );
-    const explicitSummary = [
-      ...section.querySelectorAll('[data-field="summary"], [itemprop="description"]'),
-    ].find((candidate) => isVisibleWithin(candidate, section));
-    const summary =
-      explicitSummary ??
-      [...section.querySelectorAll("p")].find((candidate) =>
-        isVisibleWithin(candidate, section),
-      );
-    const title = heading ? visibleDescendantText(heading, section, 180) : "";
-    const summaryText = summary ? visibleDescendantText(summary, section, 400) : "";
+    const fields = findSemanticSectionFields(section);
+    const title = fields.heading ? visibleDescendantText(fields.heading, 180) : "";
+    const summaryText = fields.summary ? visibleDescendantText(fields.summary, 400) : "";
     if (!title || !summaryText) {
       throw new Error(`Tool “${tool.name}” is stale: section “${id}” lost its heading or summary.`);
     }

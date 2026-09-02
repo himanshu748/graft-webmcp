@@ -342,6 +342,75 @@ export function isElementVisible(element: Element): boolean {
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
+const MAX_SEMANTIC_FIELD_NODES = 100;
+const MAX_SEMANTIC_FIELD_CANDIDATES = 25;
+const NON_CONTENT_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"]);
+
+export function findSemanticSectionFields(section: Element): {
+  heading: Element | null;
+  summary: Element | null;
+} {
+  let heading: Element | null = null;
+  let explicitSummary: Element | null = null;
+  let paragraph: Element | null = null;
+  let headingCandidates = 0;
+  let explicitSummaryCandidates = 0;
+  let paragraphCandidates = 0;
+  let visited = 0;
+  const stack: Element[] = [];
+  if (section.firstElementChild) stack.push(section.firstElementChild);
+
+  while (stack.length > 0 && visited < MAX_SEMANTIC_FIELD_NODES) {
+    const element = stack.pop();
+    if (!element) continue;
+    visited += 1;
+    if (element.nextElementSibling) stack.push(element.nextElementSibling);
+
+    const isHeading = element.matches("h1, h2, h3, h4, h5, h6");
+    const isExplicitSummary = element.matches(
+      '[data-field="summary"], [itemprop="description"]',
+    );
+    const isParagraph = element.matches("p");
+    if (isHeading && !heading) headingCandidates += 1;
+    if (isExplicitSummary && !explicitSummary) explicitSummaryCandidates += 1;
+    if (isParagraph && !paragraph) paragraphCandidates += 1;
+
+    if (
+      NON_CONTENT_TAGS.has(element.tagName) ||
+      element.hasAttribute("data-graft-ignore") ||
+      !isElementVisible(element)
+    ) {
+      continue;
+    }
+
+    if (
+      isHeading &&
+      !heading &&
+      headingCandidates <= MAX_SEMANTIC_FIELD_CANDIDATES
+    ) {
+      heading = element;
+    }
+    if (
+      isExplicitSummary &&
+      !explicitSummary &&
+      explicitSummaryCandidates <= MAX_SEMANTIC_FIELD_CANDIDATES
+    ) {
+      explicitSummary = element;
+    }
+    if (
+      isParagraph &&
+      !paragraph &&
+      paragraphCandidates <= MAX_SEMANTIC_FIELD_CANDIDATES
+    ) {
+      paragraph = element;
+    }
+    if (heading && explicitSummary) break;
+    if (element.firstElementChild) stack.push(element.firstElementChild);
+  }
+
+  return { heading, summary: explicitSummary ?? paragraph };
+}
+
 export function resolveUniqueElement(
   root: ParentNode,
   primary: string,

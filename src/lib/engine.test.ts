@@ -267,6 +267,97 @@ describe("Graft compiler", () => {
     expect(compilation.tools.filter((tool) => tool.recipe === "R8")).toHaveLength(12);
   });
 
+  it("bounds semantic text traversal on deeply nested owner markup", async () => {
+    const deepSummary = `Bounded summary. ${"<span>".repeat(1_200)}tail-over-budget${"</span>".repeat(1_200)}`;
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Deep owner page</title></head><body>
+        <main id="deep-surface">
+          <section id="deep-one" data-graft-section="capability">
+            <h2>Deep capability</h2>
+            <p data-field="summary">${deepSummary}</p>
+          </section>
+          <section id="deep-two" data-graft-section="capability">
+            <h2>Second capability</h2>
+            <p data-field="summary">A normal summary.</p>
+          </section>
+        </main>
+      </body></html>`,
+      "/deep-owner.html",
+    );
+    const getComputedStyle = vi
+      .spyOn(document.defaultView as Window, "getComputedStyle")
+      .mockReturnValue({ display: "block", visibility: "visible" } as CSSStyleDeclaration);
+
+    const compilation = compileDocument(document);
+    expect(compilation.snapshot.sectionGroups).toHaveLength(1);
+    expect(getComputedStyle.mock.calls.length).toBeLessThan(900);
+
+    const list = compilation.tools.find((tool) => tool.name === "list_capabilities") as GraftTool;
+    getComputedStyle.mockClear();
+    const listed = await executeTool(list, { limit: 10 }, { root: document });
+    expect(getComputedStyle.mock.calls.length).toBeLessThan(900);
+    expect(listed.data?.rows).toEqual([
+      expect.objectContaining({
+        id: "deep-one",
+        title: "Deep capability",
+        summary: "Bounded summary.",
+      }),
+      expect.objectContaining({ id: "deep-two", summary: "A normal summary." }),
+    ]);
+    expect(JSON.stringify(listed.data?.rows)).not.toContain("tail-over-budget");
+  });
+
+  it("bounds semantic field discovery across deep candidate amplification", async () => {
+    const document = fixtureDocument(
+      `<!doctype html><html><head><title>Deep wrappers</title></head><body>
+        <main id="wrapper-surface">
+          <section id="wrapped-one" data-graft-section="capability">
+            <h2>Wrapped capability</h2><p>Wrapped summary.</p>
+          </section>
+          <section id="wrapped-two" data-graft-section="capability">
+            <h2>Second capability</h2><p>Second summary.</p>
+          </section>
+        </main>
+      </body></html>`,
+      "/deep-wrappers.html",
+    );
+    const initial = compileDocument(document);
+    const list = initial.tools.find((tool) => tool.name === "list_capabilities") as GraftTool;
+    expect(list).toBeDefined();
+
+    const section = document.getElementById("wrapped-one") as HTMLElement;
+    const wrapperRoot = document.createElement("div");
+    let deepest = wrapperRoot;
+    for (let depth = 0; depth < 150; depth += 1) {
+      const wrapper = document.createElement("div");
+      deepest.append(wrapper);
+      deepest = wrapper;
+    }
+    for (let candidate = 0; candidate < 300; candidate += 1) {
+      const heading = document.createElement("h2");
+      heading.textContent = `Invalid heading ${candidate}`;
+      const summary = document.createElement("p");
+      summary.setAttribute("data-field", "summary");
+      summary.textContent = `Invalid summary ${candidate}`;
+      deepest.append(heading, summary);
+    }
+    [...section.children].forEach((child) => deepest.append(child));
+    section.append(wrapperRoot);
+
+    const getComputedStyle = vi
+      .spyOn(document.defaultView as Window, "getComputedStyle")
+      .mockReturnValue({ display: "block", visibility: "visible" } as CSSStyleDeclaration);
+    const bounded = compileDocument(document);
+    expect(bounded.snapshot.sectionGroups).toHaveLength(0);
+    expect(getComputedStyle.mock.calls.length).toBeLessThan(700);
+
+    getComputedStyle.mockClear();
+    await expect(executeTool(list, { limit: 10 }, { root: document })).rejects.toThrow(
+      "lost its heading or summary",
+    );
+    expect(getComputedStyle.mock.calls.length).toBeLessThan(250);
+  });
+
   it("holds a detail contract when its required list contract is not eligible", () => {
     const document = fixtureDocument(
       `<!doctype html><html><head><title>Ambiguous records</title></head><body>
