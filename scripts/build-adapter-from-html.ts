@@ -40,6 +40,7 @@ const html = readFileSync(htmlPath, "utf8");
 const sanitized = sanitizeFixtureHtml(html, parsedUrl.href);
 const compilation = compileDocument(sanitized.document);
 const runtimeSource = readFileSync("src/generated/graft-runtime.js", "utf8");
+const exportedRuntimeSource = runtimeSource.trim();
 const graftRevision = execFileSync("git", ["describe", "--always", "--dirty"], {
   encoding: "utf8",
 }).trim();
@@ -65,7 +66,7 @@ const provenance = {
   graftRevision,
   sourceHtmlSha256: sha256(html),
   sanitizedSnapshotFingerprint: snapshotFingerprint(compilation.snapshot),
-  runtimeSha256: sha256(runtimeSource),
+  runtimeSha256: sha256(exportedRuntimeSource),
   reviewedToolSetFingerprint: toolSetFingerprint(compilation.tools),
   exportedToolsSha256: sha256(JSON.stringify(exported)),
 };
