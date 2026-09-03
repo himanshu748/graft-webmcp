@@ -317,8 +317,8 @@ export class WebMCPRegistry {
     const documentContext =
       typeof document === "undefined" ? undefined : (document as GraftDocument).modelContext;
     if (documentContext && documentContext === this.modelContext) {
-      // Typed equivalent of the native document.modelContext.registerTool({...}) call.
-      await documentContext.registerTool(descriptor, { signal });
+      const document = globalThis.document as GraftDocument & { modelContext: ModelContextLike };
+      await document.modelContext.registerTool({ ...descriptor }, { signal });
       return;
     }
     await this.modelContext.registerTool(descriptor, { signal });
