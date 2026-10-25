@@ -1,0 +1,25 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include what you expected instead. For security vulnerabilities, follow SECURITY.md instead of filing details here.
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Include the target URL if relevant (public pages only).
+    validations: {required: true}
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Node 20.19, Chrome 149, macOS"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots

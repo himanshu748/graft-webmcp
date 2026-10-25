@@ -1,5 +1,11 @@
 # Graft
 
+[![CI](https://github.com/himanshu748/graft-webmcp/actions/workflows/ci.yml/badge.svg)](https://github.com/himanshu748/graft-webmcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[Live demo](https://graft-webmcp.vercel.app) · [Technical spec](docs/TECHNICAL_SPEC.md) · [Contributing](CONTRIBUTING.md) · [Report a bug](https://github.com/himanshu748/graft-webmcp/issues/new/choose)
+
 **A governed tool layer for websites that never shipped one.**
 
 Graft gives site owners and agents an inspectable migration path from semantic HTML to reviewed WebMCP contracts.
@@ -422,6 +428,10 @@ Stage One is pass or fail on viability, theme fit and meaningful API use. The su
 - [Chrome best practices](https://developer.chrome.com/docs/ai/webmcp/best-practices)
 - [Chrome tool security](https://developer.chrome.com/docs/ai/webmcp/secure-tools)
 - [Chrome WebMCP evals](https://developer.chrome.com/docs/ai/webmcp/evals)
+
+## Contributing
+
+Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then browse [open issues](https://github.com/himanshu748/graft-webmcp/issues) — look for `good first issue`. Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
