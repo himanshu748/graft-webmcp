@@ -431,7 +431,7 @@ Stage One is pass or fail on viability, theme fit and meaningful API use. The su
 
 ## Contributing
 
-Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then browse [open issues](https://github.com/himanshu748/graft-webmcp/issues) — look for `good first issue`. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), then browse [open issues](https://github.com/himanshu748/graft-webmcp/issues) — look for `good first issue`. Report security issues as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -28,6 +28,6 @@ npm run check:owner-adapter   # if you changed the runtime or exported adapter
 
 ## Reporting bugs and requesting features
 
-Use the [issue templates](https://github.com/himanshu748/graft-webmcp/issues/new/choose). For security problems, see [SECURITY.md](SECURITY.md) instead of filing a public issue.
+Use the [issue templates](https://github.com/himanshu748/graft-webmcp/issues/new/choose). For security problems, see [SECURITY.md](SECURITY.md).
 
 By contributing you agree that your contributions are licensed under the [MIT License](LICENSE) and that you will follow the [Code of Conduct](CODE_OF_CONDUCT.md).
