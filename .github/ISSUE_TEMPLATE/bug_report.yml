@@ -6,7 +6,7 @@ body:
     id: what
     attributes:
       label: What happened?
-      description: Include what you expected instead.
+      description: Include what you expected instead. For security vulnerabilities, follow SECURITY.md instead of filing details here.
     validations: {required: true}
   - type: textarea
     id: repro
