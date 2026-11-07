@@ -7,6 +7,7 @@ import {
   UA,
 } from "./_net.js";
 import { renderWithBrowser } from "./_render.js";
+import { MAX_ROBOTS_CHARS, robotsVerdict, type RobotsVerdict } from "./_robots.js";
 
 const MAX_REDIRECTS = 3;
 const MAX_STYLESHEETS = 4;
@@ -39,35 +40,19 @@ function clientRenderedReport(html: string): { shell: boolean; textLength: numbe
   return { shell: textLength < 400 && !hasStructure && listCount < 5, textLength };
 }
 
-/** Minimal robots.txt evaluation for the wildcard and GraftBot agents. */
-async function robotsAllows(target: URL): Promise<boolean> {
+/** Reads the origin's robots.txt and judges `target` against it (RFC 9309). */
+async function robotsAllows(target: URL): Promise<RobotsVerdict> {
+  const pathAndQuery = (target.pathname || "/") + target.search;
   try {
     const response = await fetch(new URL("/robots.txt", target.origin), {
       headers: { "user-agent": UA },
       signal: timeoutSignal(4000),
     });
-    if (!response.ok) return true;
-    const body = (await response.text()).slice(0, 100_000);
-    const path = target.pathname || "/";
-    let applies = false;
-    let allowed = true;
-    for (const rawLine of body.split(/\r?\n/)) {
-      const line = (rawLine.split("#")[0] ?? "").trim();
-      if (!line) continue;
-      const [rawKey, ...rest] = line.split(":");
-      const key = (rawKey ?? "").trim().toLowerCase();
-      const value = rest.join(":").trim();
-      if (key === "user-agent") {
-        applies = value === "*" || value.toLowerCase() === "graftbot";
-        continue;
-      }
-      if (!applies || !value) continue;
-      if (key === "disallow" && path.startsWith(value)) allowed = false;
-      if (key === "allow" && path.startsWith(value)) allowed = true;
-    }
-    return allowed;
+    const body = response.ok ? (await response.text()).slice(0, MAX_ROBOTS_CHARS) : "";
+    return robotsVerdict(response.status, body, pathAndQuery);
   } catch {
-    return true;
+    // Unreachable is treated like a 5xx: fully disallowed until it can be read.
+    return { allowed: false, reason: "unavailable" };
   }
 }
 
@@ -181,13 +166,21 @@ export default async function handler(req: any, res: any) {
   try {
     await assertPublicHost(target);
 
-    if (!(await robotsAllows(target))) {
-      throw new IntakeError(
-        403,
-        "robots",
-        "That site's robots.txt disallows this path.",
-        "Graft honours robots.txt even though a snapshot is a single read.",
-      );
+    const robots = await robotsAllows(target);
+    if (!robots.allowed) {
+      throw robots.reason === "unavailable"
+        ? new IntakeError(
+            403,
+            "robots",
+            "That site's robots.txt could not be read, so Graft treats the site as off-limits for now.",
+            "A robots.txt that fails with a server error or does not answer counts as disallowing everything (RFC 9309). Try again later.",
+          )
+        : new IntakeError(
+            403,
+            "robots",
+            "That site's robots.txt disallows this path.",
+            "Graft honours robots.txt even though a snapshot is a single read.",
+          );
     }
 
     const { response, finalUrl } = await fetchFollowing(target);
