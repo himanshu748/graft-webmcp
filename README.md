@@ -344,6 +344,12 @@ GRAFT_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 `CHROME_PATH` is used by `scripts/verify-native.mjs`; the development API handlers specifically read `GRAFT_CHROME_PATH`.
 
+### Security headers when self-hosting
+
+The Vercel deployment applies the response headers in [`vercel.json`](vercel.json) to the app, static assets, and API routes. When hosting Graft elsewhere, configure the same headers at the reverse proxy or application server: Content-Security-Policy, Referrer-Policy, X-Content-Type-Options, X-Frame-Options, and Permissions-Policy. In particular, the CSP restricts scripts and API connections to the app's own origin and blocks embedding the app in another site's frame.
+
+The workbench uses React inline style attributes, so `style-src` permits inline **styles** while `script-src` deliberately does **not** permit inline scripts. The sanitized source preview is a sandboxed `srcdoc` iframe with its own restrictive CSP. Preserve these distinctions when adapting the policy. Vite's local development server does not apply Vercel's production headers; validate the actual deployed origin (including the sanitized preview and WebMCP runbook) and check the browser console for CSP violations.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the Vite development server |
