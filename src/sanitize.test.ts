@@ -4,6 +4,76 @@ import { describe, expect, it } from "vitest";
 import { sanitizeFixtureHtml, serializeSanitizedDocument } from "./sanitize";
 
 describe("sanitizeFixtureHtml", () => {
+  it("keeps adversarial markup inert across reproducible nested-HTML mutations", () => {
+    // Fixed-seed cases make a failed security invariant repeatable in CI.
+    let seed = 0x5a17e11;
+    const next = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed;
+    };
+    const tags = ["a", "img", "form", "div", "svg", "math", "noscript"];
+    const attributes = [
+      "href", "src", "srcset", "action", "formaction", "poster", "background",
+      "xlink:href", "onclick", "onerror", "style",
+    ];
+    const destinations = [
+      "javascript:alert(1)",
+      "data:text/html,<svg onload=alert(1)>",
+      "https://attacker.example/pixel?x=1&y=2",
+      "//attacker.example/track",
+      "#safe-section",
+      "https://attacker.example/a%22onload%3Dalert(1)",
+    ];
+    const networkAttributes = new Set([
+      "action", "background", "cite", "formaction", "href", "longdesc",
+      "ping", "poster", "src", "srcdoc", "srcset",
+    ]);
+
+    for (let attempt = 0; attempt < 256; attempt += 1) {
+      const tag = tags[next() % tags.length]!;
+      const attribute = attributes[next() % attributes.length]!;
+      const destination = destinations[next() % destinations.length]!;
+      const value = attribute === "style"
+        ? `background: url('${destination}')`
+        : destination;
+      const source = `<!doctype html><html><head>
+        <style>@import "https://attacker.example/import.css";
+          .remote { background: url(https://attacker.example/bg.png) }
+        </style></head><body>
+        <${tag} ${attribute}="${value.replaceAll('"', "&quot;")}" onmouseover="alert(1)">
+          <svg><script>alert(1)</script><a xlink:href="javascript:alert(1)">X</a></svg>
+          <math><mtext><img src="https://attacker.example/math.png"></mtext></math>
+        </${tag}>
+        <meta http-equiv="refresh" content="0;url=https://attacker.example">
+        <iframe srcdoc="<script>alert(1)</script>"></iframe>
+        </body></html>`;
+
+      const result = sanitizeFixtureHtml(source, "https://owned.example/");
+      const doc = result.document;
+      expect(doc.querySelector("script, iframe, frame, object, embed, portal, base, link")).toBeNull();
+      expect(doc.querySelector('meta[http-equiv]:not([http-equiv="Content-Security-Policy"])')).toBeNull();
+
+      for (const element of doc.querySelectorAll("*")) {
+        for (const attr of element.attributes) {
+          const name = attr.name.toLowerCase();
+          expect(name.startsWith("on"), `case ${attempt}: event attribute ${name}`).toBe(false);
+          if (name === "href") {
+            expect(attr.value, `case ${attempt}: navigable href`).toMatch(/^#[A-Za-z][\w:.-]*$/);
+          } else {
+            expect(networkAttributes.has(name) || name.endsWith(":href"),
+              `case ${attempt}: network attribute ${name}`).toBe(false);
+          }
+        }
+      }
+
+      const css = [
+        ...[...doc.querySelectorAll("style")].map((style) => style.textContent ?? ""),
+        ...[...doc.querySelectorAll("[style]")].map((element) => element.getAttribute("style") ?? ""),
+      ].join("\n");
+      expect(css, `case ${attempt}: network CSS`).not.toMatch(/@import|url\s*\(/i);
+    }
+  });
+
   it("removes active content and blocks network-capable references", () => {
     const unsafe = `<!doctype html>
       <html>
