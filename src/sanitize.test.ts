@@ -30,9 +30,9 @@ describe("sanitizeFixtureHtml", () => {
     ]);
 
     for (let attempt = 0; attempt < 256; attempt += 1) {
-      const tag = tags[next() % tags.length];
-      const attribute = attributes[next() % attributes.length];
-      const destination = destinations[next() % destinations.length];
+      const tag = tags[next() % tags.length]!;
+      const attribute = attributes[next() % attributes.length]!;
+      const destination = destinations[next() % destinations.length]!;
       const value = attribute === "style"
         ? `background: url('${destination}')`
         : destination;
