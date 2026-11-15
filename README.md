@@ -391,6 +391,9 @@ docs/DEMO_RUNBOOK.md    exact sub-three-minute recording path
 
 ## Safety model
 
+For trust boundaries, mitigations, known limitations and review guidance, see
+the [threat model](docs/THREAT_MODEL.md).
+
 - Intake reads a page, it does not proxy one. Nothing is re-served under Graft's origin and the target's own scripts never run in your tab
 - Target content is never cached. The intake response is `no-store` at the edge and nothing is written to disk
 - Pages that need JavaScript are rendered by a headless Chromium in the serverless function, with credentials off, downloads off, dialogs dismissed, and every request host resolved and checked against private and link-local ranges before it is allowed out. Nothing rendered there reaches your browser as executable code, because the result goes through the same sanitizer
