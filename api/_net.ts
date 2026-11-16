@@ -20,7 +20,8 @@ export function isPrivateAddress(address: string): boolean {
     const v6 = address.toLowerCase();
     if (v6 === "::1" || v6 === "::") return true;
     if (v6.startsWith("fc") || v6.startsWith("fd")) return true;
-    if (v6.startsWith("fe80")) return true;
+    // IPv6 link-local covers fe80::/10, including fe9*, fea*, and feb*.
+    if (/^fe[89ab]/.test(v6)) return true;
     if (v6.startsWith("::ffff:")) return isPrivateAddress(v6.slice(7));
     return false;
   }
