@@ -1,7 +1,56 @@
 import { describe, expect, it } from "vitest";
+import fc from "fast-check";
 import { ToolArgumentValidationError, validateToolArguments } from "./validation";
 
 describe("security boundary: reproducible argument fuzzing", () => {
+  it("rejects arbitrary agent input or returns a schema-conforming value", () => {
+    const tool = {
+      name: "set_quantity",
+      inputSchema: {
+        type: "object" as const,
+        additionalProperties: false,
+        required: ["product", "quantity"],
+        properties: {
+          product: { type: "string" as const, pattern: "^item-[0-9]{1,3}$", maxLength: 8 },
+          quantity: { type: "integer" as const, minimum: 1, maximum: 5 },
+          confirmed: { type: "boolean" as const },
+        },
+      },
+    };
+    const arbValue = fc.oneof(
+      fc.jsonValue(),
+      fc.constantFrom(Number.NaN, Infinity, -Infinity, undefined),
+    );
+    const arbitraryInput = fc.dictionary(
+      fc.constantFrom("product", "quantity", "confirmed", "extra", "__proto__", "constructor"),
+      arbValue,
+      { maxKeys: 6 },
+    );
+
+    fc.assert(
+      fc.property(arbitraryInput, (args) => {
+        try {
+          validateToolArguments(tool, args);
+        } catch (error) {
+          expect(error).toBeInstanceOf(ToolArgumentValidationError);
+          expect((error as ToolArgumentValidationError).issues.length).toBeGreaterThan(0);
+          return;
+        }
+
+        expect(Object.keys(args).every((key) => ["product", "quantity", "confirmed"].includes(key)))
+          .toBe(true);
+        expect(args.product).toMatch(/^item-[0-9]{1,3}$/);
+        expect((args.product as string).length).toBeLessThanOrEqual(8);
+        expect(typeof args.quantity).toBe("number");
+        expect(Number.isInteger(args.quantity)).toBe(true);
+        expect(args.quantity as number).toBeGreaterThanOrEqual(1);
+        expect(args.quantity as number).toBeLessThanOrEqual(5);
+        if ("confirmed" in args) expect(typeof args.confirmed).toBe("boolean");
+      }),
+      { seed: 0x5a17e11, numRuns: process.env.GRAFT_FUZZ_NIGHTLY === "1" ? 5000 : 500 },
+    );
+  });
+
   it("either validates the full schema or raises only a typed validation error", () => {
     const tool = {
       name: "set_quantity",
