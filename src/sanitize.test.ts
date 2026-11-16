@@ -1,9 +1,62 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from "vitest";
+import fc from "fast-check";
 import { sanitizeFixtureHtml, serializeSanitizedDocument } from "./sanitize";
 
 describe("sanitizeFixtureHtml", () => {
+  it("preserves inert-document invariants under shrinkable hostile HTML mutations", () => {
+    const activeNodes = "script, iframe, frame, object, embed, portal, base, link";
+    const networkAttrs = new Set([
+      "action", "background", "cite", "formaction", "href", "longdesc",
+      "ping", "poster", "src", "srcdoc", "srcset",
+    ]);
+    const fragment = fc.record({
+      tag: fc.constantFrom("div", "a", "form", "img", "svg", "math", "noscript"),
+      attr: fc.constantFrom("href", "src", "srcdoc", "xlink:href", "onclick", "onerror", "style"),
+      destination: fc.constantFrom(
+        "javascript:alert(1)", "data:text/html,<svg onload=alert(1)>",
+        "https://outside.example/track", "//outside.example/track",
+      ),
+      text: fc.string({ maxLength: 48 }),
+    });
+
+    fc.assert(
+      fc.property(fragment, ({ tag, attr, destination, text }) => {
+        const html = `<html><head><base href="https://outside.example/">
+          <meta http-equiv="refresh" content="0;url=https://outside.example/">
+          <style>body{background:url(https://outside.example/img)}</style>
+          </head><body>
+          <${tag} ${attr}="${destination.replaceAll('"', "&quot;")}" onmouseover="attack()">
+            ${text}<svg><foreignObject><script>attack()</script></foreignObject>
+              <a xlink:href="javascript:attack()">bad</a></svg>
+            <math><mtext><img src="https://outside.example/math"></mtext></math>
+          </${tag}>
+          <iframe srcdoc="<script>attack()</script>"></iframe>
+          </body></html>`;
+        const { document: doc } = sanitizeFixtureHtml(html, "https://owned.example/");
+        expect(doc.querySelector(activeNodes)).toBeNull();
+        expect(doc.querySelector('meta[http-equiv]:not([http-equiv="Content-Security-Policy"])')).toBeNull();
+        for (const element of doc.querySelectorAll("*")) {
+          for (const attribute of element.attributes) {
+            const name = attribute.name.toLowerCase();
+            expect(name.startsWith("on")).toBe(false);
+            if (name === "href") {
+              expect(attribute.value).toMatch(/^#[A-Za-z][\w:.-]*$/);
+            } else {
+              expect(networkAttrs.has(name) || name.endsWith(":href")).toBe(false);
+            }
+          }
+        }
+        const css = [...doc.querySelectorAll("style, [style]")]
+          .map((element) => element.getAttribute("style") ?? element.textContent ?? "")
+          .join("\n");
+        expect(css).not.toMatch(/@import|url\s*\(/i);
+      }),
+      { seed: 0x5a17e11, numRuns: process.env.GRAFT_FUZZ_NIGHTLY === "1" ? 2500 : 250 },
+    );
+  });
+
   it("keeps adversarial markup inert across reproducible nested-HTML mutations", () => {
     // Fixed-seed cases make a failed security invariant repeatable in CI.
     let seed = 0x5a17e11;
