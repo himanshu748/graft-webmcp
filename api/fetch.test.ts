@@ -37,6 +37,17 @@ describe("untrusted URL and DNS boundaries", () => {
     }
   });
 
+  it("blocks special-use IPv4 addresses and DNS results", async () => {
+    for (const address of ["192.0.0.8", "192.0.2.1", "198.18.0.1", "198.19.255.254", "198.51.100.7", "203.0.113.5", "224.0.0.1", "255.255.255.255"]) {
+      expect(isPrivateAddress(address), address).toBe(true);
+    }
+    for (const address of ["192.0.0.9", "192.0.0.10", "192.1.0.1", "198.20.0.1", "203.0.114.1", "223.255.255.254"]) {
+      expect(isPrivateAddress(address), address).toBe(false);
+    }
+    vi.mocked(lookup).mockResolvedValueOnce([{ address: "198.18.0.1", family: 4 }] as never);
+    await expect(assertPublicHost(new URL("https://benchmark.example/resource"))).rejects.toMatchObject({ reason: "private" });
+  });
+
   it("rejects local hosts and hostnames whose DNS resolves to private space", async () => {
     await expect(assertPublicHost(new URL("https://localhost/admin"))).rejects.toMatchObject({ reason: "private" });
     await expect(assertPublicHost(new URL("http://169.254.169.254/latest/meta-data"))).rejects.toMatchObject({ reason: "private" });
