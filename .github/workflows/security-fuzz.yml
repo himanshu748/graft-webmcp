@@ -1,0 +1,25 @@
+name: Nightly security property tests
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-security-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run extended sanitizer and argument-validation properties
+        env:
+          GRAFT_FUZZ_NIGHTLY: "1"
+        run: npx vitest run src/sanitize.test.ts src/lib/validation.fuzz.test.ts
