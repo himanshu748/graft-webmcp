@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("untrusted URL and DNS boundaries", () => {
   it("recognizes private, link-local and mapped IPv6 addresses", () => {
-    for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.16.0.1", "192.168.1.2", "::1", "fd00::1", "::ffff:127.0.0.1"]) {
+    for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.16.0.1", "192.168.1.2", "::1", "fd00::1", "::ffff:127.0.0.1", "fe80::1", "fe90::1", "fea0::1", "febf::1"]) {
       expect(isPrivateAddress(address), address).toBe(true);
     }
     for (const address of ["8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"]) {
@@ -42,6 +42,8 @@ describe("untrusted URL and DNS boundaries", () => {
     await expect(assertPublicHost(new URL("http://169.254.169.254/latest/meta-data"))).rejects.toMatchObject({ reason: "private" });
     vi.mocked(lookup).mockResolvedValueOnce([{ address: "10.0.0.3", family: 4 }] as never);
     await expect(assertPublicHost(new URL("https://host.example/resource"))).rejects.toMatchObject({ reason: "private" });
+    vi.mocked(lookup).mockResolvedValueOnce([{ address: "fe9f::1", family: 6 }] as never);
+    await expect(assertPublicHost(new URL("https://ipv6.example/resource"))).rejects.toMatchObject({ reason: "private" });
     await expect(assertPublicHost(new URL("https://public.example/resource"))).resolves.toBeUndefined();
   });
 
