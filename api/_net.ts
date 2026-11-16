@@ -29,11 +29,20 @@ export function isPrivateAddress(address: string): boolean {
   if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return true;
   const a = parts[0] ?? -1;
   const b = parts[1] ?? -1;
+  const c = parts[2] ?? -1;
+  const d = parts[3] ?? -1;
   if (a === 10 || a === 127 || a === 0) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
   if (a === 169 && b === 254) return true;
   if (a === 100 && b >= 64 && b <= 127) return true;
+  // Reserved, documentation, benchmarking, multicast and future-use space
+  // is not a public fetch target even if it is outside RFC1918 private space.
+  // 192.0.0.9 and .10 are globally reachable anycast exceptions in IANA's registry.
+  if (a === 192 && b === 0 && ((c === 0 && d !== 9 && d !== 10) || c === 2)) return true;
+  if (a === 198 && ((b === 18 || b === 19) || (b === 51 && c === 100))) return true;
+  if (a === 203 && b === 0 && c === 113) return true;
+  if (a >= 224) return true;
   return false;
 }
 
