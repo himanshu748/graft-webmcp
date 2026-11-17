@@ -19,13 +19,13 @@
     "@phosphor-icons/react": "^2.1.10",
     "@sparticuz/chromium": "^149.0.0",
     "puppeteer-core": "^25.9.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
-    "@types/react": "^19.1.10",
-    "@types/react-dom": "^19.1.7",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.2",
     "fast-check": "^4.10.2",
     "jsdom": "^26.1.0",
