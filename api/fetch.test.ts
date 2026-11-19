@@ -62,6 +62,19 @@ describe("untrusted URL and DNS boundaries", () => {
     await expect(assertPublicHost(new URL("file:///etc/passwd"))).rejects.toMatchObject({ reason: "scheme" });
     await expect(assertPublicHost(new URL("https://login.example.com/"))).rejects.toMatchObject({ reason: "denylisted" });
   });
+
+  it("rejects URL-embedded credentials before DNS or network requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const url of ["https://user:pass@public.example/", "https://user@public.example/"]) {
+      const reply = fakeResponse();
+      await handler({ query: { url } }, reply.response);
+      expect(reply.result()).toMatchObject({ status: 400, data: { reason: "credentials" } });
+      expect(JSON.stringify(reply.result().data)).not.toContain("pass");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+  });
 });
 
 describe("response size ceilings", () => {
