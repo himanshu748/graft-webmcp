@@ -10,6 +10,7 @@ import { renderWithBrowser } from "./_render.js";
 import { MAX_ROBOTS_CHARS, robotsVerdict, type RobotsVerdict } from "./_robots.js";
 
 const MAX_REDIRECTS = 3;
+const MAX_ROBOTS_REDIRECTS = 5;
 const MAX_STYLESHEETS = 4;
 
 const STRIPPED_HEADERS = [
@@ -44,12 +45,26 @@ function clientRenderedReport(html: string): { shell: boolean; textLength: numbe
 async function robotsAllows(target: URL): Promise<RobotsVerdict> {
   const pathAndQuery = (target.pathname || "/") + target.search;
   try {
-    const response = await fetch(new URL("/robots.txt", target.origin), {
-      headers: { "user-agent": UA },
-      signal: timeoutSignal(4000),
-    });
-    const body = response.ok ? (await response.text()).slice(0, MAX_ROBOTS_CHARS) : "";
-    return robotsVerdict(response.status, body, pathAndQuery);
+    let current = new URL("/robots.txt", target.origin);
+    // fetch() follows redirects by default, bypassing our public-host check.
+    // RFC 9309 permits robots redirects across hosts, so check every hop.
+    for (let hop = 0; hop <= MAX_ROBOTS_REDIRECTS; hop += 1) {
+      await assertPublicHost(current);
+      const response = await fetch(current, {
+        redirect: "manual",
+        headers: { "user-agent": UA },
+        signal: timeoutSignal(4000),
+      });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) return { allowed: false, reason: "unavailable" };
+        current = new URL(location, current);
+        continue;
+      }
+      const body = response.ok ? (await response.text()).slice(0, MAX_ROBOTS_CHARS) : "";
+      return robotsVerdict(response.status, body, pathAndQuery);
+    }
+    return { allowed: false, reason: "unavailable" };
   } catch {
     // Unreachable is treated like a 5xx: fully disallowed until it can be read.
     return { allowed: false, reason: "unavailable" };
