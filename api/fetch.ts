@@ -48,7 +48,9 @@ async function robotsAllows(target: URL): Promise<RobotsVerdict> {
       headers: { "user-agent": UA },
       signal: timeoutSignal(4000),
     });
-    const body = response.ok ? (await response.text()).slice(0, MAX_ROBOTS_CHARS) : "";
+    // Stream-cap robots.txt too: slicing after response.text() still buffers an
+    // arbitrarily large untrusted response in the serverless function.
+    const body = response.ok ? await readCapped(response, MAX_ROBOTS_CHARS) : "";
     return robotsVerdict(response.status, body, pathAndQuery);
   } catch {
     // Unreachable is treated like a 5xx: fully disallowed until it can be read.
