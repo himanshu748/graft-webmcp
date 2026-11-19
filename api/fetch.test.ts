@@ -91,6 +91,44 @@ describe("response size ceilings", () => {
 });
 
 describe("fetch endpoint SSRF and robots enforcement", () => {
+  it("refuses a robots.txt redirect to a private address without fetching it", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/page" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://public.example/robots.txt");
+  });
+
+  it("revalidates public robots redirects and applies their rules to the original path", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302, headers: { location: "https://robots-cdn.example/policy.txt" },
+      }))
+      .mockResolvedValueOnce(new Response("User-agent: *\nDisallow: /secret", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/secret/data" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://robots-cdn.example/policy.txt");
+    expect(vi.mocked(lookup)).toHaveBeenCalledWith("robots-cdn.example", { all: true });
+  });
+
+  it("fails closed when robots.txt exceeds its redirect limit", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      new Response(null, { status: 302, headers: { location: "/robots.txt" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
   it("re-validates redirected hosts before contacting them", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 404 }))
