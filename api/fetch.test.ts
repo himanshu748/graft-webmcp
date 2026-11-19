@@ -151,6 +151,15 @@ describe("fetch endpoint SSRF and robots enforcement", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("fails closed on an oversized robots.txt without requesting the page", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response("x".repeat(512_001), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/resource" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("enforces a received HTML byte limit without a Content-Length header", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 404 }))

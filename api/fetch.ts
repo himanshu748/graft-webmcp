@@ -61,7 +61,9 @@ async function robotsAllows(target: URL): Promise<RobotsVerdict> {
         current = new URL(location, current);
         continue;
       }
-      const body = response.ok ? (await response.text()).slice(0, MAX_ROBOTS_CHARS) : "";
+      // Stream-cap untrusted robots.txt: response.text() would buffer the entire body.
+      // Oversize throws and robotsAllows fails closed before fetching the page.
+      const body = response.ok ? await readCapped(response, MAX_ROBOTS_CHARS) : "";
       return robotsVerdict(response.status, body, pathAndQuery);
     }
     return { allowed: false, reason: "unavailable" };
