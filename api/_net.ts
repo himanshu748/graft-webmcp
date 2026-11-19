@@ -65,6 +65,12 @@ export async function assertPublicHost(target: URL): Promise<void> {
   if (target.protocol !== "https:" && target.protocol !== "http:") {
     throw new IntakeError(400, "scheme", "Only http and https URLs can be compiled.");
   }
+  // A snapshot URL is public input, not an authentication channel. Reject
+  // userinfo before any DNS lookup or request so URL-embedded credentials
+  // cannot be sent to a remote site or echoed in the reported final URL.
+  if (target.username || target.password) {
+    throw new IntakeError(400, "credentials", "URLs containing embedded credentials are not supported.");
+  }
   const host = target.hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
     throw new IntakeError(403, "private", "That host is not reachable from Graft.");
