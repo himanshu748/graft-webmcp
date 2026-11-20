@@ -22,6 +22,10 @@ export function isPrivateAddress(address: string): boolean {
     if (v6.startsWith("fc") || v6.startsWith("fd")) return true;
     // IPv6 link-local covers fe80::/10, including fe9*, fea*, and feb*.
     if (/^fe[89ab]/.test(v6)) return true;
+    // Deprecated site-local (fec0::/10), multicast (ff00::/8), and
+    // documentation (2001:db8::/32) ranges are not public fetch targets.
+    if (/^fe[c-f]/.test(v6) || v6.startsWith("ff")) return true;
+    if (/^2001:0?db8(?::|$)/.test(v6)) return true;
     if (v6.startsWith("::ffff:")) return isPrivateAddress(v6.slice(7));
     return false;
   }
@@ -57,6 +61,12 @@ export class IntakeError extends Error {
   }
 }
 
+// WHATWG URL.hostname includes brackets around IPv6 literals in Node.js.
+// net.isIP expects the unbracketed address.
+function unbracketIPv6Host(host: string): string {
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+}
+
 /**
  * Server-side fetch is an SSRF surface, so every hop is validated rather than
  * only the URL the caller typed.
@@ -71,7 +81,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
   if (target.username || target.password) {
     throw new IntakeError(400, "credentials", "URLs containing embedded credentials are not supported.");
   }
-  const host = target.hostname.toLowerCase();
+  const host = unbracketIPv6Host(target.hostname.toLowerCase());
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
     throw new IntakeError(403, "private", "That host is not reachable from Graft.");
   }
@@ -102,7 +112,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
 
 /** Cheap synchronous screen for subresource requests during a render. */
 export function isObviouslyPrivateHost(host: string): boolean {
-  const lower = host.toLowerCase();
+  const lower = unbracketIPv6Host(host.toLowerCase());
   if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".internal")) {
     return true;
   }
@@ -122,7 +132,7 @@ const hostVerdictCache = new Map<string, boolean>();
  * does not have.
  */
 export async function isHostAllowedForEgress(host: string): Promise<boolean> {
-  const lower = host.toLowerCase();
+  const lower = unbracketIPv6Host(host.toLowerCase());
   const cached = hostVerdictCache.get(lower);
   if (cached !== undefined) return cached;
 
