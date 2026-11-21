@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lookup } from "node:dns/promises";
 import handler from "./fetch.js";
-import { assertPublicHost, IntakeError, isPrivateAddress, readCapped } from "./_net.js";
+import { assertPublicHost, IntakeError, isPrivateAddress, isObviouslyPrivateHost, readCapped } from "./_net.js";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 vi.mock("./_render.js", () => ({ renderWithBrowser: vi.fn() }));
@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("untrusted URL and DNS boundaries", () => {
   it("recognizes private, link-local and mapped IPv6 addresses", () => {
-    for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.16.0.1", "192.168.1.2", "::1", "fd00::1", "::ffff:127.0.0.1", "fe80::1", "fe90::1", "fea0::1", "febf::1"]) {
+    for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.16.0.1", "192.168.1.2", "::1", "fd00::1", "::ffff:127.0.0.1", "fe80::1", "fe90::1", "fea0::1", "febf::1", "fec0::1", "feff::1", "ff02::1", "ff0e::1", "2001:db8::1", "2001:0db8:1::a"]) {
       expect(isPrivateAddress(address), address).toBe(true);
     }
     for (const address of ["8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"]) {
@@ -46,6 +46,18 @@ describe("untrusted URL and DNS boundaries", () => {
     }
     vi.mocked(lookup).mockResolvedValueOnce([{ address: "198.18.0.1", family: 4 }] as never);
     await expect(assertPublicHost(new URL("https://benchmark.example/resource"))).rejects.toMatchObject({ reason: "private" });
+  });
+
+  it("classifies bracketed IPv6 URLs without sending their hostnames to DNS", async () => {
+    for (const address of ["::1", "fe80::1", "fec0::1", "ff02::1", "2001:db8::1"]) {
+      await expect(assertPublicHost(new URL(`https://[${address}]/`)))
+        .rejects.toMatchObject({ reason: "private" });
+      expect(isObviouslyPrivateHost(`[${address}]`)).toBe(true);
+    }
+    await expect(assertPublicHost(new URL("https://[2606:4700:4700::1111]/")))
+      .resolves.toBeUndefined();
+    expect(isObviouslyPrivateHost("[2606:4700:4700::1111]")).toBe(false);
+    expect(lookup).not.toHaveBeenCalled();
   });
 
   it("rejects local hosts and hostnames whose DNS resolves to private space", async () => {
