@@ -119,40 +119,26 @@ export function isObviouslyPrivateHost(host: string): boolean {
   return isIP(lower) ? isPrivateAddress(lower) : false;
 }
 
-const hostVerdictCache = new Map<string, boolean>();
-
 /**
- * `isObviouslyPrivateHost` only catches literal addresses. A public hostname
- * with a private A record walks straight past it, which is the standard way to
- * reach a cloud metadata endpoint. Egress decisions must resolve the name.
+ * A public DNS answer must not authorize later requests to the same hostname:
+ * it may resolve to a private address after a DNS change. In particular, do
+ * not reuse an allow verdict across intercepted browser subresource requests.
  *
- * Residual risk: Chromium resolves independently, so a DNS entry that answers
- * differently between our lookup and its own (rebinding) is not closed by this.
- * Closing that needs network-level egress control, which a serverless function
- * does not have.
+ * Residual risk: Chromium resolves independently after this check, so a DNS
+ * change between our lookup and its connection remains a TOCTOU risk that
+ * requires network-level egress restrictions to prevent.
  */
 export async function isHostAllowedForEgress(host: string): Promise<boolean> {
   const lower = unbracketIPv6Host(host.toLowerCase());
-  const cached = hostVerdictCache.get(lower);
-  if (cached !== undefined) return cached;
+  if (isObviouslyPrivateHost(lower)) return false;
+  if (isIP(lower)) return !isPrivateAddress(lower);
 
-  let allowed: boolean;
-  if (isObviouslyPrivateHost(lower)) {
-    allowed = false;
-  } else if (isIP(lower)) {
-    allowed = !isPrivateAddress(lower);
-  } else {
-    try {
-      const resolved = await lookup(lower, { all: true });
-      allowed = resolved.length > 0 && !resolved.some((entry) => isPrivateAddress(entry.address));
-    } catch {
-      allowed = false;
-    }
+  try {
+    const resolved = await lookup(lower, { all: true });
+    return resolved.length > 0 && !resolved.some((entry) => isPrivateAddress(entry.address));
+  } catch {
+    return false;
   }
-
-  if (hostVerdictCache.size > 500) hostVerdictCache.clear();
-  hostVerdictCache.set(lower, allowed);
-  return allowed;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lookup } from "node:dns/promises";
 import handler from "./fetch.js";
-import { assertPublicHost, IntakeError, isPrivateAddress, isObviouslyPrivateHost, readCapped } from "./_net.js";
+import { assertPublicHost, IntakeError, isHostAllowedForEgress, isPrivateAddress, isObviouslyPrivateHost, readCapped } from "./_net.js";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 vi.mock("./_render.js", () => ({ renderWithBrowser: vi.fn() }));
@@ -68,6 +68,36 @@ describe("untrusted URL and DNS boundaries", () => {
     vi.mocked(lookup).mockResolvedValueOnce([{ address: "fe9f::1", family: 6 }] as never);
     await expect(assertPublicHost(new URL("https://ipv6.example/resource"))).rejects.toMatchObject({ reason: "private" });
     await expect(assertPublicHost(new URL("https://public.example/resource"))).resolves.toBeUndefined();
+  });
+
+  it("revalidates public DNS for each browser egress decision", async () => {
+    const resolve = vi.mocked(lookup);
+    resolve.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }] as never);
+    resolve.mockResolvedValueOnce([{ address: "10.0.0.7", family: 4 }] as never);
+    expect(await isHostAllowedForEgress("changing.example")).toBe(true);
+    expect(await isHostAllowedForEgress("changing.example")).toBe(false);
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed for empty, mixed private and public, and failed DNS answers", async () => {
+    const resolve = vi.mocked(lookup);
+    resolve.mockResolvedValueOnce([] as never);
+    resolve.mockResolvedValueOnce([
+      { address: "8.8.8.8", family: 4 },
+      { address: "169.254.169.254", family: 4 },
+    ] as never);
+    resolve.mockRejectedValueOnce(new Error("DNS failure"));
+    expect(await isHostAllowedForEgress("empty.example")).toBe(false);
+    expect(await isHostAllowedForEgress("mixed.example")).toBe(false);
+    expect(await isHostAllowedForEgress("failed.example")).toBe(false);
+  });
+
+  it("handles bracketed IPv6 egress literals without DNS resolution", async () => {
+    for (const address of ["::1", "fe80::1", "fec0::1", "ff02::1", "2001:db8::1"]) {
+      expect(await isHostAllowedForEgress(`[${address}]`), address).toBe(false);
+    }
+    expect(await isHostAllowedForEgress("[2606:4700:4700::1111]")).toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
   });
 
   it("rejects non-HTTP schemes and prohibited authentication hosts", async () => {
