@@ -230,3 +230,35 @@ describe("fetch endpoint SSRF and robots enforcement", () => {
     expect(reply.result()).toMatchObject({ status: 413, data: { reason: "too-large" } });
   });
 });
+
+describe("network error disclosure", () => {
+  it("never returns upstream exception text containing credentials", async () => {
+    const secret = "synthetic-not-a-real-credential";
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockRejectedValueOnce(new Error(`fetch https://public.example/?token=${secret} failed`));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/page" } }, reply.response);
+    expect(reply.result()).toMatchObject({
+      status: 502,
+      data: { reason: "network", detail: "The remote request failed." },
+    });
+    expect(JSON.stringify(reply.result().data)).not.toContain(secret);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the fixed timeout diagnostic without returning exception text", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockRejectedValueOnce(new Error("The operation was aborted; token=synthetic-private-data"));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/page" } }, reply.response);
+    expect(reply.result()).toMatchObject({
+      status: 502,
+      data: { reason: "network", detail: "The request timed out after 12 seconds." },
+    });
+    expect(JSON.stringify(reply.result().data)).not.toContain("synthetic-private-data");
+  });
+});

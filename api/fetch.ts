@@ -296,7 +296,9 @@ export default async function handler(req: any, res: any) {
       ok: false,
       reason: "network",
       message: "Graft could not reach that page.",
-      detail: message.includes("aborted") ? "The request timed out after 12 seconds." : message,
+      // Exception text can include an untrusted URL, query credentials, or headers.
+      // Keep timeout diagnostics but never send raw upstream error strings to clients.
+      detail: message.includes("aborted") ? "The request timed out after 12 seconds." : "The remote request failed.",
     });
   }
 }
