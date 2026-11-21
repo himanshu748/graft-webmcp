@@ -73,6 +73,26 @@ async function robotsAllows(target: URL): Promise<RobotsVerdict> {
   }
 }
 
+/** Require permission for each destination before fetching its page content. */
+async function requireRobotsAccess(target: URL): Promise<void> {
+  const robots = await robotsAllows(target);
+  if (robots.allowed) return;
+  if (robots.reason === "unavailable") {
+    throw new IntakeError(
+      403,
+      "robots",
+      "That site's robots.txt could not be read, so Graft treats the site as off-limits for now.",
+      "A robots.txt that fails with a server error or does not answer counts as disallowing everything (RFC 9309). Try again later.",
+    );
+  }
+  throw new IntakeError(
+    403,
+    "robots",
+    "That site's robots.txt disallows this path.",
+    "Graft honours robots.txt even though a snapshot is a single read.",
+  );
+}
+
 async function fetchFollowing(start: URL): Promise<{ response: Response; finalUrl: URL }> {
   let current = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
@@ -88,7 +108,12 @@ async function fetchFollowing(start: URL): Promise<{ response: Response; finalUr
     });
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
-      current = new URL(location, current);
+      const next = new URL(location, current);
+      // A redirect changes the URL whose robots policy governs the fetch.
+      // Check the next path (and host) before sending any request there.
+      await assertPublicHost(next);
+      await requireRobotsAccess(next);
+      current = next;
       continue;
     }
     return { response, finalUrl: current };
@@ -183,22 +208,7 @@ export default async function handler(req: any, res: any) {
   try {
     await assertPublicHost(target);
 
-    const robots = await robotsAllows(target);
-    if (!robots.allowed) {
-      throw robots.reason === "unavailable"
-        ? new IntakeError(
-            403,
-            "robots",
-            "That site's robots.txt could not be read, so Graft treats the site as off-limits for now.",
-            "A robots.txt that fails with a server error or does not answer counts as disallowing everything (RFC 9309). Try again later.",
-          )
-        : new IntakeError(
-            403,
-            "robots",
-            "That site's robots.txt disallows this path.",
-            "Graft honours robots.txt even though a snapshot is a single read.",
-          );
-    }
+    await requireRobotsAccess(target);
 
     const { response, finalUrl } = await fetchFollowing(target);
     if (!response.ok) {

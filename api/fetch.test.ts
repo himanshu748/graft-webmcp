@@ -141,6 +141,54 @@ describe("fetch endpoint SSRF and robots enforcement", () => {
     expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
+  it("enforces robots rules on a same-origin redirected page before fetching it", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302, headers: { location: "/private/data" },
+      }))
+      .mockResolvedValueOnce(new Response("User-agent: *\nDisallow: /private", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/allowed" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe("https://public.example/robots.txt");
+    expect(fetchMock.mock.calls.every(([url]) => String(url) !== "https://public.example/private/data")).toBe(true);
+  });
+
+  it("enforces destination-host robots on cross-origin page redirects", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302, headers: { location: "https://other.example/blocked" },
+      }))
+      .mockResolvedValueOnce(new Response("User-agent: *\nDisallow: /blocked", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/allowed" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 403, data: { reason: "robots" } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe("https://other.example/robots.txt");
+  });
+
+  it("continues when a redirect destination is allowed by its own robots rules", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302, headers: { location: "https://other.example/public" },
+      }))
+      .mockResolvedValueOnce(new Response("User-agent: *\nDisallow: /private", { status: 200 }))
+      .mockResolvedValueOnce(new Response("<html><body><section>Safe</section></body></html>", {
+        status: 200, headers: { "content-type": "text/html" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = fakeResponse();
+    await handler({ query: { url: "https://public.example/allowed" } }, reply.response);
+    expect(reply.result()).toMatchObject({ status: 200, data: { finalUrl: "https://other.example/public" } });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("re-validates redirected hosts before contacting them", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 404 }))
