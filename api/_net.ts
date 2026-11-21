@@ -67,6 +67,12 @@ function unbracketIPv6Host(host: string): string {
   return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
 }
 
+// An absolute DNS hostname may end with a root dot. Treat both spellings
+// identically for denylist, loopback, DNS resolution, and egress cache checks.
+function normalizePolicyHost(host: string): string {
+  return unbracketIPv6Host(host.toLowerCase()).replace(/\.$/, "");
+}
+
 /**
  * Server-side fetch is an SSRF surface, so every hop is validated rather than
  * only the URL the caller typed.
@@ -81,7 +87,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
   if (target.username || target.password) {
     throw new IntakeError(400, "credentials", "URLs containing embedded credentials are not supported.");
   }
-  const host = unbracketIPv6Host(target.hostname.toLowerCase());
+  const host = normalizePolicyHost(target.hostname);
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
     throw new IntakeError(403, "private", "That host is not reachable from Graft.");
   }
@@ -112,7 +118,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
 
 /** Cheap synchronous screen for subresource requests during a render. */
 export function isObviouslyPrivateHost(host: string): boolean {
-  const lower = unbracketIPv6Host(host.toLowerCase());
+  const lower = normalizePolicyHost(host);
   if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".internal")) {
     return true;
   }
@@ -132,7 +138,7 @@ const hostVerdictCache = new Map<string, boolean>();
  * does not have.
  */
 export async function isHostAllowedForEgress(host: string): Promise<boolean> {
-  const lower = unbracketIPv6Host(host.toLowerCase());
+  const lower = normalizePolicyHost(host);
   const cached = hostVerdictCache.get(lower);
   if (cached !== undefined) return cached;
 
