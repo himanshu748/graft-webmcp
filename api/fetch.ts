@@ -152,6 +152,9 @@ export async function inlineStylesheets(html: string, base: URL): Promise<{ html
         let current = new URL(href);
         for (let hop = 0; hop <= 2; hop += 1) {
           await assertPublicHost(current);
+          // Stylesheet URLs and their redirects must obey their own robots policy,
+          // just as page redirects do; never fetch a disallowed asset.
+          await requireRobotsAccess(current);
           const response = await fetch(current, {
             redirect: "manual",
             headers: { "user-agent": UA },
