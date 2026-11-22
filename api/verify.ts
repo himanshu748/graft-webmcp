@@ -209,7 +209,9 @@ export default async function handler(req: any, res: any) {
       ok: false,
       reason: "network",
       message: "Graft could not verify that page.",
-      detail: error instanceof Error ? error.message : undefined,
+      // Browser and network exceptions may contain URL query credentials or headers.
+      // Return only a fixed diagnostic, never the untrusted exception text.
+      detail: "The remote verification request failed.",
     });
   }
 }

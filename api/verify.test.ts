@@ -129,4 +129,17 @@ describe("WebMCP verifier endpoint contracts", () => {
     expect(await call({ url: "https://example.com" }))
       .toMatchObject({ status: 503, body: { reason: "renderer" } });
   });
+  it("does not expose secrets from browser or network exceptions", async () => {
+    const syntheticSecret = "demo-only-credential-value";
+    nativeTools.mockRejectedValue(new Error(
+      `Browser navigate failed for https://example.com/?token=${syntheticSecret}`,
+    ));
+    const result = await call({ url: "https://example.com" });
+    expect(result).toMatchObject({
+      status: 502,
+      body: { reason: "network", detail: "The remote verification request failed." },
+    });
+    expect(JSON.stringify(result.body)).not.toContain(syntheticSecret);
+  });
+
 });
