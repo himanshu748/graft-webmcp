@@ -106,6 +106,12 @@ describe("untrusted URL and DNS boundaries", () => {
     expect(resolve).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects empty DNS answers before authorizing a fetch", async () => {
+    vi.mocked(lookup).mockResolvedValueOnce([] as never);
+    await expect(assertPublicHost(new URL("https://no-address.example/page")))
+      .rejects.toMatchObject({ status: 400, reason: "dns" });
+  });
+
   it("fails closed for empty, mixed private and public, and failed DNS answers", async () => {
     const resolve = vi.mocked(lookup);
     resolve.mockResolvedValueOnce([] as never);

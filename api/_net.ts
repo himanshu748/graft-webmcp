@@ -105,6 +105,11 @@ export async function assertPublicHost(target: URL): Promise<void> {
   } catch {
     throw new IntakeError(400, "dns", `Could not resolve ${host}.`);
   }
+  // A successful resolver call with no addresses must not authorize egress.
+  // In particular, do not treat an empty list as "all addresses are public".
+  if (resolved.length === 0) {
+    throw new IntakeError(400, "dns", `Could not resolve ${host}.`);
+  }
   if (resolved.some((entry) => isPrivateAddress(entry.address))) {
     throw new IntakeError(403, "private", "That host resolves to a private address.");
   }
