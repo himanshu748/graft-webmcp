@@ -44,6 +44,26 @@ describe("live search endpoint capture", () => {
     expect(form.getAttribute("data-graft-action")).toBe("https://shop.example.com/find");
   });
 
+  it("does not promote cross-origin form actions into replay endpoints", () => {
+    const cases = [
+      "https://other.example/find",
+      "//other.example/find",
+      "http://shop.example.com/find",
+    ];
+    for (const action of cases) {
+      const markup = PAGE.replace('action="/find"', `action="${action}"`);
+      const doc = sanitizeFixtureHtml(markup, "https://shop.example.com/catalog/").document;
+      const form = doc.querySelector("form")!;
+      expect(form.getAttribute("action")).toBeNull();
+      expect(form.getAttribute("data-graft-action")).toBeNull();
+    }
+    // An absolute same-origin action remains eligible for GET replay.
+    const safe = PAGE.replace('action="/find"', 'action="https://shop.example.com/find"');
+    const doc = sanitizeFixtureHtml(safe, "https://shop.example.com/catalog/").document;
+    expect(doc.querySelector("form")?.getAttribute("data-graft-action"))
+      .toBe("https://shop.example.com/find");
+  });
+
   it("captures no endpoint when the source has no known origin", () => {
     const { compilation } = compile();
     const tool = compilation.tools.find((t) => t.binding.kind === "search")!;
