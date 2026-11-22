@@ -6,6 +6,13 @@ export interface SanitizedFixture {
 }
 
 const ACTIVE_NODE_SELECTOR = [
+  // SMIL elements can change attributes (including URLs) after sanitization.
+  // Treat them as active content rather than retaining inert-looking markup.
+  "animate",
+  "animateMotion",
+  "animateTransform",
+  "set",
+  "discard",
   "script",
   "iframe",
   "frame",
