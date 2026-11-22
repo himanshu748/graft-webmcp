@@ -64,7 +64,10 @@ export function sanitizeFixtureHtml(html: string, baseUrl?: string): SanitizedFi
     if (!baseUrl) continue;
     try {
       const resolved = new URL(rawAction ?? "", baseUrl);
-      if (resolved.protocol === "https:" || resolved.protocol === "http:") {
+      // Search replay must not send user-provided queries to a form endpoint
+      // on another origin chosen by the page being inspected.
+      if ((resolved.protocol === "https:" || resolved.protocol === "http:") &&
+          resolved.origin === new URL(baseUrl).origin) {
         formTargets.set(form, { action: resolved.href, method });
       }
     } catch {
