@@ -28,6 +28,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("untrusted URL and DNS boundaries", () => {
+  it("rejects mDNS and home-network special-use names before DNS or fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const host of [
+      "printer.local", "local", "device.home.arpa", "home.arpa",
+      "printer.LOCAL", "router.HOME.ARPA",
+    ]) {
+      await expect(assertPublicHost(new URL(`https://${host}/admin`)))
+        .rejects.toMatchObject({ status: 403, reason: "private" });
+      expect(isObviouslyPrivateHost(host)).toBe(true);
+      expect(await isHostAllowedForEgress(host)).toBe(false);
+    }
+    expect(lookup).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    for (const host of ["locally.example", "home.arpa.example", "public.example"]) {
+      expect(isObviouslyPrivateHost(host)).toBe(false);
+      await expect(assertPublicHost(new URL(`https://${host}/`))).resolves.toBeUndefined();
+    }
+  });
+
   it("recognizes private, link-local and mapped IPv6 addresses", () => {
     for (const address of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.16.0.1", "192.168.1.2", "::1", "fd00::1", "::ffff:127.0.0.1", "fe80::1", "fe90::1", "fea0::1", "febf::1", "fec0::1", "feff::1", "ff02::1", "ff0e::1", "2001:db8::1", "2001:0db8:1::a"]) {
       expect(isPrivateAddress(address), address).toBe(true);
