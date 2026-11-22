@@ -37,6 +37,23 @@ describe("untrusted URL and DNS boundaries", () => {
     }
   });
 
+  it("rejects IPv6 transition and translation ranges that can expose blocked IPv4 hosts", async () => {
+    for (const address of [
+      "2002:c0a8:0101::1", // 6to4 embeds 192.168.1.1
+      "2001:0:4136:e378:8000:63bf:3fff:fdd2", // Teredo
+      "64:ff9b::a00:1", // NAT64 embeds 10.0.0.1
+      "64:ff9b:1::1", // local-use NAT64 prefix
+    ]) {
+      expect(isPrivateAddress(address), address).toBe(true);
+      expect(isObviouslyPrivateHost(`[${address}]`)).toBe(true);
+      await expect(assertPublicHost(new URL(`https://[${address}]/`)))
+        .rejects.toMatchObject({ reason: "private" });
+    }
+    for (const address of ["2606:4700:4700::1111", "2001:4860:4860::8888"]) {
+      expect(isPrivateAddress(address), address).toBe(false);
+    }
+  });
+
   it("blocks special-use IPv4 addresses and DNS results", async () => {
     for (const address of ["192.0.0.8", "192.0.2.1", "198.18.0.1", "198.19.255.254", "198.51.100.7", "203.0.113.5", "224.0.0.1", "255.255.255.255"]) {
       expect(isPrivateAddress(address), address).toBe(true);
