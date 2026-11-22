@@ -67,6 +67,14 @@ function unbracketIPv6Host(host: string): string {
   return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
 }
 
+/** Special-use names identify local services, not public web fetch targets. */
+function isLocalServiceHost(host: string): boolean {
+  return host === "localhost" || host.endsWith(".localhost") ||
+    host === "local" || host.endsWith(".local") ||
+    host === "home.arpa" || host.endsWith(".home.arpa") ||
+    host.endsWith(".internal");
+}
+
 /**
  * Server-side fetch is an SSRF surface, so every hop is validated rather than
  * only the URL the caller typed.
@@ -82,7 +90,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
     throw new IntakeError(400, "credentials", "URLs containing embedded credentials are not supported.");
   }
   const host = unbracketIPv6Host(target.hostname.toLowerCase());
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) {
+  if (isLocalServiceHost(host)) {
     throw new IntakeError(403, "private", "That host is not reachable from Graft.");
   }
   if (DENY_PATTERNS.some((pattern) => pattern.test(host))) {
@@ -113,7 +121,7 @@ export async function assertPublicHost(target: URL): Promise<void> {
 /** Cheap synchronous screen for subresource requests during a render. */
 export function isObviouslyPrivateHost(host: string): boolean {
   const lower = unbracketIPv6Host(host.toLowerCase());
-  if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".internal")) {
+  if (isLocalServiceHost(lower)) {
     return true;
   }
   return isIP(lower) ? isPrivateAddress(lower) : false;
