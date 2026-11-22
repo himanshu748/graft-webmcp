@@ -26,6 +26,13 @@ export function isPrivateAddress(address: string): boolean {
     // documentation (2001:db8::/32) ranges are not public fetch targets.
     if (/^fe[c-f]/.test(v6) || v6.startsWith("ff")) return true;
     if (/^2001:0?db8(?::|$)/.test(v6)) return true;
+    // Transition/translation addresses can encapsulate IPv4 destinations.
+    // They are not safe substitutes for directly validated public IPs: 6to4
+    // embeds an IPv4 router, Teredo uses IPv4 relays, and NAT64 can translate
+    // otherwise blocked RFC1918/loopback addresses.
+    if (/^2002(?::|$)/.test(v6)) return true; // 6to4 (2002::/16)
+    if (/^2001:(?:0{1,4})?(?::|$)/.test(v6)) return true; // Teredo (2001::/32)
+    if (v6.startsWith("64:ff9b:")) return true; // NAT64 well-known/local-use prefixes
     if (v6.startsWith("::ffff:")) return isPrivateAddress(v6.slice(7));
     return false;
   }
