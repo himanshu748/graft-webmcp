@@ -142,6 +142,26 @@ export async function isHostAllowedForEgress(host: string): Promise<boolean> {
 }
 
 /**
+ * Apply the same public-host and sensitive-site policy to browser navigations
+ * as direct URL intake. Chromium follows redirects itself, outside the manual
+ * fetch redirect loop, so the original URL check is not enough.
+ *
+ * Subresources keep the public-IP rule; applying the sensitive-site denylist to
+ * third-party scripts would break benign pages that reference those domains.
+ */
+export async function isBrowserRequestAllowed(target: URL, isMainNavigation: boolean): Promise<boolean> {
+  if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+  // Userinfo must never be sent as browser subresource credentials either.
+  if (target.username || target.password) return false;
+  try {
+    if (isMainNavigation) await assertPublicHost(target);
+    return await isHostAllowedForEgress(target.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A chunked response has no content-length to check, so the cap is enforced
  * while reading. Buffering first and measuring afterwards is how a function
  * runs out of memory.

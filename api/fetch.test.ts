@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lookup } from "node:dns/promises";
 import handler from "./fetch.js";
-import { assertPublicHost, IntakeError, isHostAllowedForEgress, isPrivateAddress, isObviouslyPrivateHost, readCapped } from "./_net.js";
+import { assertPublicHost, IntakeError, isBrowserRequestAllowed, isHostAllowedForEgress, isPrivateAddress, isObviouslyPrivateHost, readCapped } from "./_net.js";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 vi.mock("./_render.js", () => ({ renderWithBrowser: vi.fn() }));
@@ -34,6 +34,33 @@ describe("untrusted URL and DNS boundaries", () => {
     }
     for (const address of ["8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"]) {
       expect(isPrivateAddress(address), address).toBe(false);
+    }
+  });
+
+  it("rechecks top-level browser redirects against the sensitive-site intake policy", async () => {
+    for (const destination of [
+      "https://login.example.org/sso",
+      "https://paypal.com/checkout",
+      "https://mail.example.org/inbox",
+      "http://127.0.0.1/diagnostics",
+    ]) {
+      expect(await isBrowserRequestAllowed(new URL(destination), true), destination).toBe(false);
+    }
+    // Benign third-party subresources retain the IP rule, not the main-frame
+    // sensitive-site policy; many public pages legitimately use them.
+    expect(await isBrowserRequestAllowed(new URL("https://login.example.org/style.css"), false))
+      .toBe(true);
+    expect(await isBrowserRequestAllowed(new URL("https://public.example.org/page"), true))
+      .toBe(true);
+  });
+
+  it("blocks browser resource URLs with embedded credentials, even on public hosts", async () => {
+    for (const url of [
+      "https://agent:secret@public.example.org/resource",
+      "https://agent:secret@public.example.org/page",
+    ]) {
+      expect(await isBrowserRequestAllowed(new URL(url), false)).toBe(false);
+      expect(await isBrowserRequestAllowed(new URL(url), true)).toBe(false);
     }
   });
 
