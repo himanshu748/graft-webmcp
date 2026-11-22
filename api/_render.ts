@@ -1,4 +1,4 @@
-import { isHostAllowedForEgress, UA } from "./_net.js";
+import { isBrowserRequestAllowed, UA } from "./_net.js";
 
 const RENDER_TIMEOUT_MS = 20_000;
 const SETTLE_MS = 1_200;
@@ -47,7 +47,8 @@ export async function renderWithBrowser(target: URL): Promise<string | null> {
           }
           // Resolves the name rather than pattern-matching it, so a public
           // hostname pointing at a private address does not get through.
-          if (!(await isHostAllowedForEgress(url.hostname))) {
+          const mainNavigation = request.isNavigationRequest() && request.frame() === page.mainFrame();
+          if (!(await isBrowserRequestAllowed(url, mainNavigation))) {
             return void (await request.abort().catch(() => {}));
           }
           return void (await request.continue().catch(() => {}));
@@ -163,7 +164,8 @@ export async function readNativeTools(target: URL): Promise<NativeToolReport | n
           if (BLOCKED_RESOURCES.has(request.resourceType())) {
             return void (await request.abort().catch(() => {}));
           }
-          if (!(await isHostAllowedForEgress(url.hostname))) {
+          const mainNavigation = request.isNavigationRequest() && request.frame() === page.mainFrame();
+          if (!(await isBrowserRequestAllowed(url, mainNavigation))) {
             return void (await request.abort().catch(() => {}));
           }
           return void (await request.continue().catch(() => {}));
