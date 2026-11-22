@@ -127,6 +127,27 @@ describe("sanitizeFixtureHtml", () => {
     }
   });
 
+  it("removes SVG animation and discard elements that can mutate sanitized markup", () => {
+    const unsafe = `<!doctype html><html><body>
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <a href="#safe"><text>Safe target</text>
+          <animate attributeName="href" to="https://outside.example/track" begin="0s" />
+          <set attributeName="href" to="javascript:alert(1)" begin="0s" />
+        </a>
+        <rect width="1" height="1">
+          <animateTransform attributeName="transform" type="translate" to="2 2" />
+          <animateMotion path="M0 0 L2 2" />
+        </rect>
+        <discard href="#safe" begin="0s" />
+      </svg>
+    </body></html>`;
+    const sanitized = sanitizeFixtureHtml(unsafe);
+    const doc = sanitized.document;
+    expect(doc.querySelector("animate, animateMotion, animateTransform, set, discard")).toBeNull();
+    expect(doc.querySelector("svg a")?.getAttribute("href")).toBe("#safe");
+    expect(sanitized.removedNodes).toBeGreaterThanOrEqual(5);
+  });
+
   it("removes active content and blocks network-capable references", () => {
     const unsafe = `<!doctype html>
       <html>
