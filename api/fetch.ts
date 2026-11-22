@@ -226,7 +226,9 @@ export default async function handler(req: any, res: any) {
     }
 
     const contentType = response.headers.get("content-type") ?? "";
-    if (!/text\/html|application\/xhtml/i.test(contentType)) {
+    // Parse the MIME essence, not substrings in parameters or lookalike types.
+    const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+    if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") {
       throw new IntakeError(
         415,
         "content-type",
