@@ -36,6 +36,21 @@ describe("isAllowedByRobots", () => {
   });
 });
 
+describe("wildcard matching safety", () => {
+  it("preserves ordered wildcard and end-anchor semantics", () => {
+    const rule = lines("User-agent: *", "Disallow: /assets/*/private/*.json$");
+    expect(isAllowedByRobots(rule, "/assets/v1/private/secret.json")).toBe(false);
+    expect(isAllowedByRobots(rule, "/assets/v1/public/secret.json")).toBe(true);
+    expect(isAllowedByRobots(rule, "/assets/v1/private/secret.json.bak")).toBe(true);
+  });
+
+  it("does not backtrack exponentially on attacker-controlled robots patterns", () => {
+    // The previous regex-based matcher could stall on this nonmatching input.
+    const rule = lines("User-agent: *", "Disallow: /" + "*a".repeat(40) + "Z$");
+    expect(isAllowedByRobots(rule, "/" + "a".repeat(160) + "Y")).toBe(true);
+  });
+});
+
 describe("group selection", () => {
   it("uses a GraftBot group instead of the * group, not merged with it", () => {
     const body = lines("User-agent: GraftBot", "Allow: /", "", "User-agent: *", "Disallow: /");
