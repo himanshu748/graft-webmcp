@@ -76,11 +76,28 @@ export function rulesFor(body: string, agent = ROBOTS_AGENT): RobotsRule[] | nul
 function patternMatches(pattern: string, path: string): boolean {
   const anchored = pattern.endsWith("$");
   const body = normalizeEncoding(anchored ? pattern.slice(0, -1) : pattern);
-  const source = body
-    .split("*")
-    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-    .join(".*");
-  return new RegExp(`^${source}${anchored ? "$" : ""}`).test(path);
+  // robots.txt is untrusted. A RegExp assembled from many * wildcards can
+  // backtrack exponentially on a non-matching path, blocking the fetch API.
+  // Match ordered literal fragments instead, without regex backtracking.
+  const parts = body.split("*");
+  const prefix = parts[0] ?? "";
+  if (!path.startsWith(prefix)) return false;
+  let next = prefix.length;
+  if (parts.length === 1) return anchored ? next === path.length : true;
+
+  for (let i = 1; i < parts.length - 1; i += 1) {
+    const literal = parts[i];
+    if (!literal) continue;
+    const index = path.indexOf(literal, next);
+    if (index < 0) return false;
+    next = index + literal.length;
+  }
+
+  const suffix = parts[parts.length - 1] ?? "";
+  if (anchored) {
+    return path.endsWith(suffix) && path.length - suffix.length >= next;
+  }
+  return !suffix || path.indexOf(suffix, next) !== -1;
 }
 
 /** Whether `pathAndQuery` may be fetched under the robots.txt `body`. */
